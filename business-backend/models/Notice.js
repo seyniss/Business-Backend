@@ -3,9 +3,9 @@ const mongoose = require("mongoose");
 const noticeSchema = new mongoose.Schema(
   {
     // ERD: notice 테이블
-    own_hotel_id: {
+    room_id: {  // own_hotel_id → room_id
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'OwnHotel',
+      ref: 'Room',  // OwnHotel → Room
       required: true,
       unique: true,
       index: true

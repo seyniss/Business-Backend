@@ -3,9 +3,9 @@ const mongoose = require("mongoose");
 const paymentSchema = new mongoose.Schema(
   {
     // ERD: payments 테이블
-    reserve_id: {
+    booking_id: {  // reserve_id → booking_id
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Reservation',
+      ref: 'Booking',  // Reservation → Booking
       required: true,
       unique: true,
       index: true

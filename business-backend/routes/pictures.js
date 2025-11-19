@@ -1,8 +1,8 @@
 const express = require("express");
 const router = express.Router();
-const OwnHotelPicture = require("../models/OwnHotelPicture");
-const OwnHotel = require("../models/OwnHotel");
-const Hotel = require("../models/Hotel");
+const RoomPicture = require("../models/RoomPicture");  // OwnHotelPicture → RoomPicture
+const Room = require("../models/Room");  // OwnHotel → Room
+const Lodging = require("../models/Lodging");
 const Business = require("../models/Business");
 const { authenticateToken } = require("../middlewares/auth");
 const { requireBusiness } = require("../middlewares/roles");
@@ -31,10 +31,10 @@ function urlToKey(u) {
 router.use(authenticateToken);
 router.use(requireBusiness);
 
-// 소유 숙소별 사진 목록 조회
-router.get("/own-hotel/:ownHotelId", async (req, res) => {
+// 방별 사진 목록 조회
+router.get("/room/:roomId", async (req, res) => {  // own-hotel → room
   try {
-    const { ownHotelId } = req.params;
+    const { roomId } = req.params;  // ownHotelId → roomId
 
     // User ID로부터 Business ID 조회
     const business = await Business.findOne({ login_id: req.user.id });
@@ -42,17 +42,17 @@ router.get("/own-hotel/:ownHotelId", async (req, res) => {
       return res.status(404).json({ message: "사업자 정보를 찾을 수 없습니다." });
     }
 
-    const ownHotel = await OwnHotel.findById(ownHotelId).populate('hotel_id');
-    if (!ownHotel) {
-      return res.status(404).json({ message: "소유 숙소를 찾을 수 없습니다." });
+    const room = await Room.findById(roomId).populate('lodging_id');  // ownHotel → room, hotel_id → lodging_id
+    if (!room) {
+      return res.status(404).json({ message: "방을 찾을 수 없습니다." });
     }
 
-    const hotel = await Hotel.findById(ownHotel.hotel_id);
-    if (!hotel || String(hotel.business) !== String(business._id)) {
+    const lodging = await Lodging.findById(room.lodging_id);  // ownHotel.hotel_id → room.lodging_id
+    if (!lodging || String(lodging.business_id) !== String(business._id)) {
       return res.status(403).json({ message: "권한이 없습니다." });
     }
 
-    const pictures = await OwnHotelPicture.find({ own_hotel_id: ownHotelId })
+    const pictures = await RoomPicture.find({ room_id: roomId })  // OwnHotelPicture → RoomPicture, own_hotel_id → room_id
       .sort({ createdAt: -1 })
       .lean();
 
@@ -65,7 +65,7 @@ router.get("/own-hotel/:ownHotelId", async (req, res) => {
 
     res.json(processedPictures);
   } catch (error) {
-    console.error("GET /api/pictures/own-hotel/:ownHotelId 실패", error);
+    console.error("GET /api/pictures/room/:roomId 실패", error);
     res.status(500).json({ message: "서버 오류" });
   }
 });
@@ -73,9 +73,9 @@ router.get("/own-hotel/:ownHotelId", async (req, res) => {
 // 사진 추가
 router.post("/", async (req, res) => {
   try {
-    const { own_hotel_id, picture_name, picture_url } = req.body;
+    const { room_id, picture_name, picture_url } = req.body;  // own_hotel_id → room_id
 
-    if (!own_hotel_id || !picture_name || !picture_url) {
+    if (!room_id || !picture_name || !picture_url) {
       return res.status(400).json({ message: "필수 필드가 누락되었습니다." });
     }
 
@@ -85,22 +85,22 @@ router.post("/", async (req, res) => {
       return res.status(404).json({ message: "사업자 정보를 찾을 수 없습니다." });
     }
 
-    // 소유 숙소 소유권 확인
-    const ownHotel = await OwnHotel.findById(own_hotel_id).populate('hotel_id');
-    if (!ownHotel) {
-      return res.status(404).json({ message: "소유 숙소를 찾을 수 없습니다." });
+    // 방 소유권 확인
+    const room = await Room.findById(room_id).populate('lodging_id');  // ownHotel → room
+    if (!room) {
+      return res.status(404).json({ message: "방을 찾을 수 없습니다." });
     }
 
-    const hotel = await Hotel.findById(ownHotel.hotel_id);
-    if (!hotel || String(hotel.business) !== String(business._id)) {
+    const lodging = await Lodging.findById(room.lodging_id);  // ownHotel.hotel_id → room.lodging_id
+    if (!lodging || String(lodging.business_id) !== String(business._id)) {
       return res.status(403).json({ message: "권한이 없습니다." });
     }
 
     // S3 키로 변환하여 저장
     const pictureKey = urlToKey(picture_url);
 
-    const picture = await OwnHotelPicture.create({
-      own_hotel_id,
+    const picture = await RoomPicture.create({  // OwnHotelPicture → RoomPicture
+      room_id,  // own_hotel_id → room_id
       picture_name,
       picture_url: pictureKey
     });
@@ -128,15 +128,15 @@ router.delete("/:id", async (req, res) => {
       return res.status(404).json({ message: "사업자 정보를 찾을 수 없습니다." });
     }
 
-    const picture = await OwnHotelPicture.findById(req.params.id);
+    const picture = await RoomPicture.findById(req.params.id);  // OwnHotelPicture → RoomPicture
     if (!picture) {
       return res.status(404).json({ message: "사진을 찾을 수 없습니다." });
     }
 
     // 소유권 확인
-    const ownHotel = await OwnHotel.findById(picture.own_hotel_id).populate('hotel_id');
-    const hotel = await Hotel.findById(ownHotel.hotel_id);
-    if (!hotel || String(hotel.business) !== String(business._id)) {
+    const room = await Room.findById(picture.room_id).populate('lodging_id');  // ownHotel → room, own_hotel_id → room_id
+    const lodging = await Lodging.findById(room.lodging_id);  // ownHotel.hotel_id → room.lodging_id
+    if (!lodging || String(lodging.business_id) !== String(business._id)) {
       return res.status(403).json({ message: "권한이 없습니다." });
     }
 

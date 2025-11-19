@@ -1,12 +1,13 @@
 const express = require("express");
 const router = express.Router();
-const Reservation = require("../models/Reservation");
+const Booking = require("../models/Booking");
 const Payment = require("../models/Payment");
-const Hotel = require("../models/Hotel");
-const OwnHotel = require("../models/OwnHotel");
+const Lodging = require("../models/Lodging");
+const Room = require("../models/Room");
 const Business = require("../models/Business");
 const { authenticateToken } = require("../middlewares/auth");
 const { requireBusiness } = require("../middlewares/roles");
+const mongoose = require("mongoose");
 
 // 모든 라우트는 인증 및 사업자 권한 필요
 router.use(authenticateToken);
@@ -28,18 +29,18 @@ router.get("/dashboard", async (req, res) => {
     tomorrow.setDate(tomorrow.getDate() + 1);
 
     // 기본 통계
-    const hotelIds = await Hotel.find({ business: business._id }).distinct('_id');
+    const lodgingIds = await Lodging.find({ business_id: business._id }).distinct('_id');
     
-    const [totalHotels, totalOwnHotels, todayReservations, pendingReservations] = await Promise.all([
-      Hotel.countDocuments({ business: business._id }),
-      OwnHotel.countDocuments({ hotel_id: { $in: hotelIds } }),
-      Reservation.countDocuments({
-        business: business._id,
+    const [totalLodgings, totalRooms, todayBookings, pendingBookings] = await Promise.all([
+      Lodging.countDocuments({ business_id: business._id }),
+      Room.countDocuments({ lodging_id: { $in: lodgingIds } }),
+      Booking.countDocuments({
+        business_id: business._id,
         createdAt: { $gte: today }
       }),
-      Reservation.countDocuments({
-        business: business._id,
-        status: 'pending'
+      Booking.countDocuments({
+        business_id: business._id,
+        booking_status: 'pending'
       })
     ]);
 
@@ -49,27 +50,27 @@ router.get("/dashboard", async (req, res) => {
     thisMonthStart.setHours(0, 0, 0, 0);
 
     // 예약과 결제를 조인하여 매출 계산
-    const reservations = await Reservation.find({
-      business: business._id,
-      status: { $in: ['confirmed', 'completed'] },
+    const bookings = await Booking.find({
+      business_id: business._id,
+      booking_status: { $in: ['confirmed', 'completed'] },
       createdAt: { $gte: thisMonthStart }
     }).select('_id').lean();
 
-    const reservationIds = reservations.map(r => r._id);
+    const bookingIds = bookings.map(b => b._id);
     const payments = await Payment.find({
-      reserve_id: { $in: reservationIds }
+      booking_id: { $in: bookingIds }
     }).lean();
 
     const thisMonthRevenue = {
       total: payments.reduce((sum, p) => sum + (p.paid || 0), 0),
-      count: reservations.length
+      count: bookings.length
     };
 
     // 이번 달 예약 추이 (일별)
-    const dailyReservations = await Reservation.aggregate([
+    const dailyBookings = await Booking.aggregate([
       {
         $match: {
-          business: business._id,
+          business_id: business._id,
           createdAt: { $gte: thisMonthStart }
         }
       },
@@ -77,17 +78,17 @@ router.get("/dashboard", async (req, res) => {
         $group: {
           _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
           count: { $sum: 1 },
-          reservationIds: { $push: '$_id' }
+          bookingIds: { $push: '$_id' }
         }
       },
       { $sort: { _id: 1 } }
     ]);
 
     // 각 일별 예약의 결제 금액 계산
-    const dailyReservationsWithRevenue = await Promise.all(
-      dailyReservations.map(async (day) => {
+    const dailyBookingsWithRevenue = await Promise.all(
+      dailyBookings.map(async (day) => {
         const payments = await Payment.find({
-          reserve_id: { $in: day.reservationIds }
+          booking_id: { $in: day.bookingIds }
         }).lean();
         const revenue = payments.reduce((sum, p) => sum + (p.paid || 0), 0);
         return {
@@ -99,18 +100,18 @@ router.get("/dashboard", async (req, res) => {
     );
 
     // 호텔별 예약 수
-    const hotelStats = await Reservation.aggregate([
+    const hotelStats = await Booking.aggregate([
       {
         $match: {
-          business: business._id,
+          business_id: business._id,
           createdAt: { $gte: thisMonthStart }
         }
       },
       {
         $group: {
-          _id: '$hotel_id',
+          _id: '$room_id',
           count: { $sum: 1 },
-          reservationIds: { $push: '$_id' }
+          bookingIds: { $push: '$_id' }
         }
       },
       { $sort: { count: -1 } },
@@ -121,7 +122,7 @@ router.get("/dashboard", async (req, res) => {
     const hotelStatsWithRevenue = await Promise.all(
       hotelStats.map(async (stat) => {
         const payments = await Payment.find({
-          reserve_id: { $in: stat.reservationIds }
+          booking_id: { $in: stat.bookingIds }
         }).lean();
         const revenue = payments.reduce((sum, p) => sum + (p.paid || 0), 0);
         return {
@@ -133,29 +134,29 @@ router.get("/dashboard", async (req, res) => {
     );
 
     // 호텔 정보와 함께 조인
-    const topHotelIds = hotelStatsWithRevenue.map(h => h._id);
-    const hotels = await Hotel.find({ _id: { $in: topHotelIds } }).select('name').lean();
-    const hotelMap = {};
-    hotels.forEach(h => { hotelMap[h._id.toString()] = h.name; });
+    const topRoomIds = hotelStatsWithRevenue.map(h => h._id);
+    const rooms = await Room.find({ _id: { $in: topRoomIds } }).select('room_name').lean();
+    const roomMap = {};
+    rooms.forEach(r => { roomMap[r._id.toString()] = r.room_name; });
 
-    const hotelStatsWithNames = hotelStatsWithRevenue.map(stat => ({
-      hotelId: stat._id,
-      hotelName: hotelMap[stat._id.toString()] || 'Unknown',
+    const roomStatsWithNames = hotelStatsWithRevenue.map(stat => ({
+      roomId: stat._id,
+      roomName: roomMap[stat._id.toString()] || 'Unknown',
       count: stat.count,
       revenue: stat.revenue
     }));
 
     res.json({
       overview: {
-        totalHotels,
-        totalOwnHotels,
-        todayReservations,
-        pendingReservations,
+        totalLodgings,
+        totalRooms,
+        todayBookings,
+        pendingBookings,
         thisMonthRevenue: thisMonthRevenue.total || 0,
-        thisMonthReservations: thisMonthRevenue.count || 0
+        thisMonthBookings: thisMonthRevenue.count || 0
       },
-      dailyReservations: dailyReservationsWithRevenue,
-      topHotels: hotelStatsWithNames
+      dailyBookings: dailyBookingsWithRevenue,
+      topRooms: roomStatsWithNames
     });
   } catch (error) {
     console.error("GET /api/stats/dashboard 실패", error);
@@ -189,44 +190,44 @@ router.get("/revenue", async (req, res) => {
       dateFormat = '%Y';
     }
 
-    const reservations = await Reservation.find({
-      business: business._id,
-      status: { $in: ['confirmed', 'completed'] },
+    const bookings = await Booking.find({
+      business_id: business._id,
+      booking_status: { $in: ['confirmed', 'completed'] },
       createdAt: { $gte: start, $lte: end }
     }).select('_id createdAt').lean();
 
-    const reservationIds = reservations.map(r => r._id);
+    const bookingIds = bookings.map(b => b._id);
     const payments = await Payment.find({
-      reserve_id: { $in: reservationIds }
+      booking_id: { $in: bookingIds }
     }).lean();
 
     // 예약 ID로 결제 매핑
     const paymentMap = {};
     payments.forEach(p => {
-      paymentMap[p.reserve_id.toString()] = p.paid || 0;
+      paymentMap[p.booking_id.toString()] = p.paid || 0;
     });
 
     // 날짜별로 그룹화
     const revenueMap = {};
-    reservations.forEach(r => {
+    bookings.forEach(b => {
       const dateKey = groupBy === 'month' 
-        ? r.createdAt.toISOString().substring(0, 7)
+        ? b.createdAt.toISOString().substring(0, 7)
         : groupBy === 'year'
-        ? r.createdAt.toISOString().substring(0, 4)
-        : r.createdAt.toISOString().substring(0, 10);
+        ? b.createdAt.toISOString().substring(0, 4)
+        : b.createdAt.toISOString().substring(0, 10);
       
       if (!revenueMap[dateKey]) {
-        revenueMap[dateKey] = { totalRevenue: 0, reservationCount: 0 };
+        revenueMap[dateKey] = { totalRevenue: 0, bookingCount: 0 };
       }
-      revenueMap[dateKey].totalRevenue += paymentMap[r._id.toString()] || 0;
-      revenueMap[dateKey].reservationCount += 1;
+      revenueMap[dateKey].totalRevenue += paymentMap[b._id.toString()] || 0;
+      revenueMap[dateKey].bookingCount += 1;
     });
 
     const revenue = Object.entries(revenueMap).map(([date, data]) => ({
       _id: date,
       totalRevenue: data.totalRevenue,
-      reservationCount: data.reservationCount,
-      averagePrice: data.reservationCount > 0 ? data.totalRevenue / data.reservationCount : 0
+      bookingCount: data.bookingCount,
+      averagePrice: data.bookingCount > 0 ? data.totalRevenue / data.bookingCount : 0
     })).sort((a, b) => a._id.localeCompare(b._id));
 
     res.json({ revenue });

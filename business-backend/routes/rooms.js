@@ -3,8 +3,8 @@ const router = express.Router();
 const OwnHotel = require("../models/OwnHotel");
 const OwnHotelPicture = require("../models/OwnHotelPicture");
 const Notice = require("../models/Notice");
-const Reservation = require("../models/Reservation");
-const Hotel = require("../models/Hotel");
+const Booking = require("../models/Booking");
+const Lodging = require("../models/Lodging");
 const Business = require("../models/Business");
 const { authenticateToken } = require("../middlewares/auth");
 const { requireBusiness } = require("../middlewares/roles");
@@ -40,10 +40,10 @@ function processImageUrls(room) {
 router.use(authenticateToken);
 router.use(requireBusiness);
 
-// 호텔별 소유 숙소 목록 조회
-router.get("/hotel/:hotelId", async (req, res) => {
+// 숙소별 소유 숙소 목록 조회
+router.get("/lodging/:lodgingId", async (req, res) => {
   try {
-    const { hotelId } = req.params;
+    const { lodgingId } = req.params;
 
     // User ID로부터 Business ID 조회
     const business = await Business.findOne({ login_id: req.user.id });
@@ -51,18 +51,18 @@ router.get("/hotel/:hotelId", async (req, res) => {
       return res.status(404).json({ message: "사업자 정보를 찾을 수 없습니다." });
     }
 
-    // 호텔 소유권 확인
-    const hotel = await Hotel.findOne({
-      _id: hotelId,
-      business: business._id
+    // 숙소 소유권 확인
+    const lodging = await Lodging.findOne({
+      _id: lodgingId,
+      business_id: business._id
     });
 
-    if (!hotel) {
-      return res.status(404).json({ message: "호텔을 찾을 수 없습니다." });
+    if (!lodging) {
+      return res.status(404).json({ message: "숙소를 찾을 수 없습니다." });
     }
 
-    const ownHotels = await OwnHotel.find({ hotel_id: hotelId })
-      .populate('hotel_id', 'name location region')
+    const ownHotels = await OwnHotel.find({ hotel_id: lodgingId })
+      .populate('hotel_id', 'lodging_name address country')
       .sort({ createdAt: -1 })
       .lean();
 
@@ -263,9 +263,9 @@ router.delete("/:id", async (req, res) => {
     }
 
     // 예약이 있는지 확인
-    const hasReservations = await Reservation.exists({ own_hotel_id: req.params.id });
+    const hasBookings = await Booking.exists({ room_id: req.params.id });
     
-    if (hasReservations) {
+    if (hasBookings) {
       return res.status(400).json({ message: "예약이 있어 소유 숙소를 삭제할 수 없습니다." });
     }
 

@@ -7,12 +7,12 @@ const mongoose = require("mongoose");
 
 // 라우트
 const authRoutes = require("./routes/auth");
-const hotelRoutes = require("./routes/hotels");
+const lodgingRoutes = require("./routes/lodgings");
 const roomRoutes = require("./routes/rooms");
-const reservationRoutes = require("./routes/reservations");
+const bookingRoutes = require("./routes/bookings");  
 const statsRoutes = require("./routes/stats");
 const uploadRoutes = require('./routes/upload');
-const facilityRoutes = require('./routes/facilities');
+const amenityRoutes = require('./routes/amenities');
 const noticeRoutes = require('./routes/notices');
 const pictureRoutes = require('./routes/pictures');
 
@@ -40,12 +40,12 @@ app.get("/", (_req, res) => res.send("Hotel Booking Business API OK"));
 
 // API 라우트
 app.use("/api/auth", authRoutes);
-app.use("/api/hotels", hotelRoutes);
+app.use("/api/lodgings", lodgingRoutes);
 app.use("/api/rooms", roomRoutes);
-app.use("/api/reservations", reservationRoutes);
+app.use("/api/bookings", bookingRoutes);  
 app.use("/api/stats", statsRoutes);
 app.use("/api/upload", uploadRoutes);
-app.use("/api/facilities", facilityRoutes);
+app.use("/api/amenities", amenityRoutes);
 app.use("/api/notices", noticeRoutes);
 app.use("/api/pictures", pictureRoutes);
 

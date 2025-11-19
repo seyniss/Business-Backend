@@ -1,7 +1,0 @@
-h1 { font-size: clamp(2.8rem, 4.5vw, 4rem); font-weight: 700; }
-h2 { font-size: clamp(2.2rem, 3.2vw, 2.8rem); font-weight: 700; }
-h3 { font-size: clamp(1.8rem, 2.6vw, 2.2rem); font-weight: 600; }
-p  { font-size: clamp(1.2rem, 1.4vw, 1.8rem); color: var(--text); }
-
-/* 필드별 크기 유틸 (원래 .input-title / .input-content) */
-.input-title, .input-content { font-size: clamp(1.4rem, 1.6vw, 1.6rem); }
