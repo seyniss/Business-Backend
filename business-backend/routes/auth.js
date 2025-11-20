@@ -228,13 +228,16 @@ router.get("/me", async (req, res) => {
 
     if (!user) return res.status(404).json({ message: "사용자 정보 없음" });
 
-    // 사업자인 경우 사업자 정보도 함께 반환
-    let responseData = user.toSafeJSON();
-    
+    const responseData = {
+      user: user.toSafeJSON()
+    };
+
+    // 역할에 따라 추가 데이터 반환
     if (user.role === "BUSINESS") {
       const business = await Business.findOne({ login_id: user._id });
-      responseData.business = business;
+      responseData.business = business || null;
     }
+    // ADMIN 역할도 필요시 여기에 추가 가능
 
     return res.status(200).json(responseData);
   } catch (error) {
