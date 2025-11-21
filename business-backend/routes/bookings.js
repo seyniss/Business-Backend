@@ -367,12 +367,22 @@ router.patch("/:id/status", async (req, res) => {
 
     const updates = { booking_status: status };
     
+    // 취소 상태일 때만 취소 사유 저장
+    if (status === 'cancelled' && cancellationReason) {
+      updates.cancellation_reason = cancellationReason;
+    } else if (status !== 'cancelled') {
+      // 취소 상태가 아니면 취소 사유 초기화
+      updates.cancellation_reason = null;
+    }
+    
     if (status === 'cancelled') {
       const payment = await Payment.findOne({ booking_id: req.params.id });
       if (payment) {
         payment.paid = 0;
         await payment.save();
       }
+      // 취소 시 결제 상태도 'refunded'로 변경
+      updates.payment_status = 'refunded';
     }
 
     const updated = await Booking.findByIdAndUpdate(
@@ -431,6 +441,9 @@ router.patch("/:id/payment", async (req, res) => {
       return res.status(404).json({ message: "예약을 찾을 수 없습니다." });
     }
 
+    // Booking 모델의 payment_status 업데이트
+    const updates = { payment_status: paymentStatus };
+    
     const paymentDoc = await Payment.findOne({ booking_id: req.params.id });
     if (paymentDoc) {
       if (paymentStatus === 'paid') {
@@ -441,7 +454,11 @@ router.patch("/:id/payment", async (req, res) => {
       await paymentDoc.save();
     }
 
-    const updated = await Booking.findById(req.params.id);
+    const updated = await Booking.findByIdAndUpdate(
+      req.params.id,
+      { $set: updates },
+      { new: true, runValidators: true }
+    );
 
     const [room, user, payment] = await Promise.all([
       Room.findById(updated.room_id).lean(),

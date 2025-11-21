@@ -59,6 +59,21 @@ const bookingSchema = new mongoose.Schema(
       index: true
     },
     
+    cancellation_reason: {
+      type: String,
+      trim: true,
+      default: null
+      // 취소 사유 (booking_status가 'cancelled'일 때만 사용)
+    },
+    
+    payment_status: {
+      type: String,
+      enum: ['pending', 'paid', 'refunded', 'failed'],
+      default: 'pending',
+      index: true
+      // 결제 상태
+    },
+    
     duration: {
       type: Number,
       required: true,
