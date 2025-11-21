@@ -12,7 +12,7 @@ const mongoose = require("mongoose");
 
 const S3_BASE_URL =
   process.env.S3_BASE_URL ||
-  `https://${process.env.S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com`;
+  `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_S3_REGION}.amazonaws.com`;
 
 function joinS3Url(base, key) {
   const b = String(base || "").replace(/\/+$/, "");

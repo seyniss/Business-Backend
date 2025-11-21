@@ -3,14 +3,14 @@ const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 // S3 클라이언트 생성 (환경 변수에서 자격 증명 가져오기)
 const s3Client = new S3Client({
-  region: process.env.AWS_REGION || 'ap-northeast-2',
+  region: process.env.AWS_S3_REGION || 'ap-northeast-2',
   credentials: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   },
 });
 
-const BUCKET_NAME = process.env.S3_BUCKET_NAME;
+const BUCKET_NAME = process.env.AWS_S3_BUCKET_NAME;
 
 /**
  * S3에 파일 업로드를 위한 presigned URL 생성
@@ -21,7 +21,7 @@ const BUCKET_NAME = process.env.S3_BUCKET_NAME;
  */
 async function presignPut(key, contentType, expiresIn = 3600) {
   if (!BUCKET_NAME) {
-    throw new Error('S3_BUCKET_NAME 환경 변수가 설정되지 않았습니다.');
+    throw new Error('AWS_S3_BUCKET_NAME 환경 변수가 설정되지 않았습니다.');
   }
 
   const command = new PutObjectCommand({
@@ -41,7 +41,7 @@ async function presignPut(key, contentType, expiresIn = 3600) {
  */
 async function deleteObject(key) {
   if (!BUCKET_NAME) {
-    throw new Error('S3_BUCKET_NAME 환경 변수가 설정되지 않았습니다.');
+    throw new Error('AWS_S3_BUCKET_NAME 환경 변수가 설정되지 않았습니다.');
   }
 
   const command = new DeleteObjectCommand({

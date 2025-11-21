@@ -54,10 +54,25 @@ app.use((req, res, next) => {
   res.status(404).json({ message: '요청하신 경로를 찾을 수 없습니다.' });
 });
 
-// 에러 핸들러
+// JSON 파싱 에러 핸들러
 app.use((err, req, res, next) => {
+  // JSON 파싱 에러 처리
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    console.error('JSON 파싱 에러:', err.message);
+    return res.status(400).json({ 
+      message: '잘못된 JSON 형식입니다.', 
+      error: 'JSON 형식이 올바르지 않습니다. 제어 문자(줄바꿈, 탭 등)가 포함되어 있는지 확인해주세요.',
+      detail: err.message 
+    });
+  }
+  
+  // 기타 에러 처리
   console.error('Unhandled Error:', err);
-  res.status(500).json({ message: '서버 오류', error: err?.message || String(err) });
+  const statusCode = err.statusCode || err.status || 500;
+  res.status(statusCode).json({ 
+    message: '서버 오류', 
+    error: err?.message || String(err) 
+  });
 });
 
 app.listen(PORT, () => {
