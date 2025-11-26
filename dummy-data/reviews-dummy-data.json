@@ -1,0 +1,147 @@
+{
+  "reviews": [
+    {
+      "lodging_id": "507f1f77bcf86cd799439011",
+      "user_id": "507f191e810c19729de860ea",
+      "booking_id": "507f1f77bcf86cd799439012",
+      "rating": 5,
+      "content": "정말 깨끗하고 편안한 숙소였습니다! 직원분들도 친절하시고 위치도 좋아서 다음에도 또 이용하고 싶어요. 특히 조식이 맛있었습니다.",
+      "images": [
+        "https://example.com/review-images/review1-1.jpg",
+        "https://example.com/review-images/review1-2.jpg"
+      ],
+      "status": "active",
+      "blocked_at": null
+    },
+    {
+      "lodging_id": "507f1f77bcf86cd799439011",
+      "user_id": "507f191e810c19729de860eb",
+      "booking_id": "507f1f77bcf86cd799439013",
+      "rating": 4,
+      "content": "전반적으로 만족스러웠습니다. 다만 체크인 시간이 조금 늦어서 기다려야 했어요. 객실은 넓고 깨끗했습니다.",
+      "images": [],
+      "status": "active",
+      "blocked_at": null
+    },
+    {
+      "lodging_id": "507f1f77bcf86cd799439011",
+      "user_id": "507f191e810c19729de860ec",
+      "booking_id": "507f1f77bcf86cd799439014",
+      "rating": 3,
+      "content": "가격 대비 괜찮은 편이지만, 방음이 좀 아쉬웠습니다. 옆방 소리가 들려서 잠을 제대로 못 잤어요.",
+      "images": [],
+      "status": "active",
+      "blocked_at": null
+    },
+    {
+      "lodging_id": "507f1f77bcf86cd799439015",
+      "user_id": "507f191e810c19729de860ed",
+      "booking_id": "507f1f77bcf86cd799439016",
+      "rating": 5,
+      "content": "완벽한 숙박이었습니다! 뷰가 정말 예뻐서 사진을 많이 찍었어요. 다음에 또 방문하겠습니다.",
+      "images": [
+        "https://example.com/review-images/review4-1.jpg"
+      ],
+      "status": "active",
+      "blocked_at": null
+    },
+    {
+      "lodging_id": "507f1f77bcf86cd799439015",
+      "user_id": "507f191e810c19729de860ee",
+      "booking_id": "507f1f77bcf86cd799439017",
+      "rating": 2,
+      "content": "객실이 생각보다 작았고, 화장실 수도꼭지가 고장나 있었습니다. 직원분께 말씀드렸지만 해결이 안 됐어요.",
+      "images": [],
+      "status": "blocked",
+      "blocked_at": "2024-01-15T10:30:00.000Z"
+    },
+    {
+      "lodging_id": "507f1f77bcf86cd799439015",
+      "user_id": "507f191e810c19729de860ef",
+      "booking_id": "507f1f77bcf86cd799439018",
+      "rating": 4,
+      "content": "친구들과 함께 왔는데 정말 좋았어요! 넓은 객실에 깨끗하고, 주변 맛집도 많아서 좋았습니다.",
+      "images": [
+        "https://example.com/review-images/review6-1.jpg",
+        "https://example.com/review-images/review6-2.jpg",
+        "https://example.com/review-images/review6-3.jpg"
+      ],
+      "status": "active",
+      "blocked_at": null
+    },
+    {
+      "lodging_id": "507f1f77bcf86cd799439019",
+      "user_id": "507f191e810c19729de860f0",
+      "booking_id": "507f1f77bcf86cd79943901a",
+      "rating": 1,
+      "content": "최악입니다. 객실에 벌레가 있었고, 침대 시트도 더러웠습니다. 환불 요청하겠습니다.",
+      "images": [
+        "https://example.com/review-images/review7-1.jpg"
+      ],
+      "status": "blocked",
+      "blocked_at": "2024-01-20T14:20:00.000Z"
+    },
+    {
+      "lodging_id": "507f1f77bcf86cd799439019",
+      "user_id": "507f191e810c19729de860f1",
+      "booking_id": "507f1f77bcf86cd79943901b",
+      "rating": 5,
+      "content": "가족 여행으로 왔는데 아이들도 좋아했어요! 수영장이 있어서 아이들이 정말 즐거워했습니다.",
+      "images": [],
+      "status": "active",
+      "blocked_at": null
+    }
+  ],
+  "reviewReports": [
+    {
+      "review_id": "507f1f77bcf86cd799439020",
+      "business_id": "507f1f77bcf86cd799439021",
+      "reason": "허위 사실을 기재한 리뷰입니다. 객실에 벌레가 있었다는 내용은 사실이 아니며, 침대 시트도 체크인 시 깨끗하게 준비되었습니다.",
+      "status": "pending",
+      "admin_response": null,
+      "reviewed_at": null,
+      "reviewed_by": null
+    },
+    {
+      "review_id": "507f1f77bcf86cd799439022",
+      "business_id": "507f1f77bcf86cd799439021",
+      "reason": "욕설 및 비방성 내용이 포함되어 있습니다. 객실이 작다는 표현은 객관적 사실과 다릅니다.",
+      "status": "pending",
+      "admin_response": null,
+      "reviewed_at": null,
+      "reviewed_by": null
+    },
+    {
+      "review_id": "507f1f77bcf86cd799439023",
+      "business_id": "507f1f77bcf86cd799439024",
+      "reason": "리뷰 내용이 객관적이지 않고 과장된 표현이 많습니다. 실제 서비스와 차이가 있습니다.",
+      "status": "reviewed",
+      "admin_response": "신고 내용을 검토한 결과, 리뷰를 차단 처리했습니다.",
+      "reviewed_at": "2024-01-18T09:15:00.000Z",
+      "reviewed_by": "507f191e810c19729de860f2"
+    },
+    {
+      "review_id": "507f1f77bcf86cd799439025",
+      "business_id": "507f1f77bcf86cd799439024",
+      "reason": "경쟁 업체의 악의적인 리뷰로 보입니다. 동일한 내용의 리뷰가 여러 곳에 게시되었습니다.",
+      "status": "rejected",
+      "admin_response": "신고 내용을 검토한 결과, 리뷰는 정상적인 것으로 판단됩니다.",
+      "reviewed_at": "2024-01-19T11:30:00.000Z",
+      "reviewed_by": "507f191e810c19729de860f2"
+    }
+  ],
+  "instructions": {
+    "description": "리뷰 시스템 테스트용 더미 데이터",
+    "usage": [
+      "1. MongoDB에 직접 삽입하려면 ObjectId를 실제 데이터베이스의 ID로 변경하세요.",
+      "2. lodgings, users, bookings 컬렉션에 해당하는 실제 ID를 사용해야 합니다.",
+      "3. Review 모델의 booking_id는 unique 제약이 있으므로 실제 예약 ID를 사용해야 합니다.",
+      "4. ReviewReport의 review_id와 business_id도 실제 데이터를 참조해야 합니다."
+    ],
+    "example_mongodb_insert": {
+      "reviews": "db.reviews.insertMany([...reviews 배열...])",
+      "reviewReports": "db.review_reports.insertMany([...reviewReports 배열...])"
+    }
+  }
+}
+
