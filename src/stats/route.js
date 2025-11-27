@@ -6,6 +6,10 @@ const router = express.Router();
 
 const {
   getDashboardStats,
+  getStatistics,
+  getRevenueStats,
+  getBookingStats,
+  getOccupancyStats,
 } = require("./controller");
 const { authenticateToken, requireBusiness } = require("../common/authMiddleware");
 
@@ -13,8 +17,20 @@ const { authenticateToken, requireBusiness } = require("../common/authMiddleware
 router.use(authenticateToken);
 router.use(requireBusiness);
 
-// GET /api/stats/dashboard → 대시보드 통계
+// GET /api/business/stats/dashboard → 대시보드 통계
 router.get("/dashboard", getDashboardStats);
+
+// GET /api/business/stats → 통계 조회 (쿼리 파라미터 기반)
+router.get("/", getStatistics);
+
+// GET /api/business/stats/revenue → 매출 통계
+router.get("/revenue", getRevenueStats);
+
+// GET /api/business/stats/bookings → 예약 통계
+router.get("/bookings", getBookingStats);
+
+// GET /api/business/stats/occupancy → 점유율 통계
+router.get("/occupancy", getOccupancyStats);
 
 module.exports = router;
 

@@ -11,26 +11,50 @@ const {
   getBlockedReviews,
   getReviewsByLodging,
   getReports,
+  getReviews,
+  getReviewById,
+  replyToReview,
+  getReviewStats,
 } = require("./controller");
-const { authenticateToken, requireRole } = require("../common/authMiddleware");
+const { authenticateToken, requireRole, requireBusiness } = require("../common/authMiddleware");
 
-// GET /api/reviews/lodging/:lodgingId → 숙소별 리뷰 목록 조회 (인증 불필요, 공개)
+// 공개 라우트 (인증 불필요)
+// GET /api/business/reviews/lodging/:lodgingId → 숙소별 리뷰 목록 조회 (공개)
 router.get("/lodging/:lodgingId", getReviewsByLodging);
 
-// POST /api/reviews → 리뷰 작성 (USER만, 로그인 필요)
-router.post("/", authenticateToken, requireRole("USER"), createReview);
+// 인증 필요 라우트
+router.use(authenticateToken);
 
-// POST /api/reviews/:id/report → 리뷰 신고 (BUSINESS만, 로그인 필요)
-router.post("/:id/report", authenticateToken, requireRole("BUSINESS"), reportReview);
+// POST /api/business/reviews → 리뷰 작성 (USER만)
+router.post("/", requireRole("USER"), createReview);
 
-// PATCH /api/reviews/:id/block → 리뷰 차단 (BUSINESS만, 로그인 필요)
-router.patch("/:id/block", authenticateToken, requireRole("BUSINESS"), blockReview);
+// ADMIN 전용 라우트 (requireBusiness 전에 위치)
+// GET /api/business/reviews/reports → 신고 내역 조회 (ADMIN만)
+router.get("/reports", requireRole("ADMIN"), getReports);
 
-// GET /api/reviews/blocked → 차단된 리뷰 목록 조회 (BUSINESS만, 로그인 필요)
-router.get("/blocked", authenticateToken, requireRole("BUSINESS"), getBlockedReviews);
+// 사업자 전용 라우트
+router.use(requireBusiness);
 
-// GET /api/reviews/reports → 신고 내역 조회 (ADMIN만, 로그인 필요)
-router.get("/reports", authenticateToken, requireRole("ADMIN"), getReports);
+// GET /api/business/reviews → 사업자의 모든 숙소 리뷰 목록 조회
+router.get("/", getReviews);
+
+// GET /api/business/reviews/stats → 리뷰 통계 (stats가 :id보다 먼저 와야 함)
+router.get("/stats", getReviewStats);
+
+// GET /api/business/reviews/blocked → 차단된 리뷰 목록 조회
+router.get("/blocked", getBlockedReviews);
+
+// GET /api/business/reviews/:id → 리뷰 상세 조회
+router.get("/:id", getReviewById);
+
+// POST /api/business/reviews/:id/reply → 리뷰 답변
+router.post("/:id/reply", replyToReview);
+
+// POST /api/business/reviews/:id/report → 리뷰 신고
+router.post("/:id/report", reportReview);
+
+// PATCH /api/business/reviews/:id/block → 리뷰 차단
+router.patch("/:id/block", blockReview);
 
 module.exports = router;
 

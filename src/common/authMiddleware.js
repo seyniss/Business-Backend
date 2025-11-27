@@ -22,24 +22,16 @@ const authenticateToken = async (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    // 3️⃣ DB에서 사용자 조회 및 토큰 버전 검증
-    const user = await User.findById(decoded.id).select('tokenVersion status role');
+    // 3️⃣ DB에서 사용자 조회
+    const user = await User.findById(decoded.id).select('isActive role');
     
     if (!user) {
       return res.status(401).json(errorResponse("USER_NOT_FOUND", 401));
     }
     
-    if (user.status === "suspended") {
-      return res.status(403).json(errorResponse("ACCOUNT_SUSPENDED", 403));
-    }
-    
-    if (user.status === "inactive") {
+    // 계정 활성 상태 확인
+    if (!user.isActive) {
       return res.status(403).json(errorResponse("ACCOUNT_INACTIVE", 403));
-    }
-    
-    // 토큰 버전 검증 (로그아웃 시 버전이 증가하면 이전 토큰 무효화)
-    if (decoded.tokenVersion !== user.tokenVersion) {
-      return res.status(403).json(errorResponse("TOKEN_EXPIRED", 403));
     }
     
     // DB에서 조회한 사용자 정보를 req.user에 추가

@@ -153,12 +153,103 @@ const getReports = async (req, res) => {
   }
 };
 
+// 사업자의 모든 숙소 리뷰 목록 조회
+const getReviews = async (req, res) => {
+  try {
+    const filters = {
+      page: req.query.page,
+      limit: req.query.limit,
+      status: req.query.status,
+      rating: req.query.rating
+    };
+
+    const result = await reviewService.getReviews(req.user.id, filters);
+    return res.status(200).json(successResponse(result, "SUCCESS", 200));
+  } catch (error) {
+    console.error("GET /api/business/reviews 실패", error);
+    
+    if (error.message === "BUSINESS_NOT_FOUND") {
+      return res.status(404).json(errorResponse("사업자 정보를 찾을 수 없습니다.", 404));
+    }
+    return res.status(500).json(errorResponse("서버 오류", 500, error.message));
+  }
+};
+
+// 리뷰 상세 조회
+const getReviewById = async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json(errorResponse("잘못된 id 형식입니다.", 400));
+    }
+
+    const result = await reviewService.getReviewById(req.params.id, req.user.id);
+    return res.status(200).json(successResponse(result, "SUCCESS", 200));
+  } catch (error) {
+    console.error("GET /api/business/reviews/:id 실패", error);
+    
+    if (error.message === "BUSINESS_NOT_FOUND") {
+      return res.status(404).json(errorResponse("사업자 정보를 찾을 수 없습니다.", 404));
+    }
+    if (error.message === "REVIEW_NOT_FOUND") {
+      return res.status(404).json(errorResponse("리뷰를 찾을 수 없습니다.", 404));
+    }
+    return res.status(500).json(errorResponse("서버 오류", 500, error.message));
+  }
+};
+
+// 리뷰 답변
+const replyToReview = async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json(errorResponse("잘못된 id 형식입니다.", 400));
+    }
+
+    const { reply } = req.body;
+
+    if (!reply || reply.trim().length === 0) {
+      return res.status(400).json(errorResponse("답변 내용을 입력해주세요.", 400));
+    }
+
+    const result = await reviewService.replyToReview(req.params.id, reply, req.user.id);
+    return res.status(200).json(successResponse(result, "답변이 작성되었습니다.", 200));
+  } catch (error) {
+    console.error("POST /api/business/reviews/:id/reply 실패", error);
+    
+    if (error.message === "BUSINESS_NOT_FOUND") {
+      return res.status(404).json(errorResponse("사업자 정보를 찾을 수 없습니다.", 404));
+    }
+    if (error.message === "REVIEW_NOT_FOUND") {
+      return res.status(404).json(errorResponse("리뷰를 찾을 수 없습니다.", 404));
+    }
+    return res.status(500).json(errorResponse("서버 오류", 500, error.message));
+  }
+};
+
+// 리뷰 통계
+const getReviewStats = async (req, res) => {
+  try {
+    const result = await reviewService.getReviewStats(req.user.id);
+    return res.status(200).json(successResponse(result, "SUCCESS", 200));
+  } catch (error) {
+    console.error("GET /api/business/reviews/stats 실패", error);
+    
+    if (error.message === "BUSINESS_NOT_FOUND") {
+      return res.status(404).json(errorResponse("사업자 정보를 찾을 수 없습니다.", 404));
+    }
+    return res.status(500).json(errorResponse("서버 오류", 500, error.message));
+  }
+};
+
 module.exports = {
   createReview,
   reportReview,
   blockReview,
   getBlockedReviews,
   getReviewsByLodging,
-  getReports
+  getReports,
+  getReviews,
+  getReviewById,
+  replyToReview,
+  getReviewStats
 };
 

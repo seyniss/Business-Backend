@@ -52,11 +52,20 @@ const userSchema = new mongoose.Schema(
       default: "USER",
       index: true
     },
-    status: {
+    // status: {
+    //   type: String,
+    //   enum: ["active", "banned", "pending"],
+    //   default: "active",
+    //   index: true
+    // },
+    isActive: {
+      type: Boolean,
+      default: true
+    },
+    provider: {
       type: String,
-      enum: ["active", "banned", "pending"],
-      default: "active",
-      index: true
+      enum: ['local', 'kakao', 'google'],
+      default: 'local'
     },
 
     // 🔒 보안 관련
@@ -77,24 +86,24 @@ const userSchema = new mongoose.Schema(
 // 메서드들
 // ----------------------
 userSchema.methods.comparePassword = function (plain) {
-  return bcrypt.compare(plain, this.password);
+  return bcrypt.compare(plain, this.passwordHash);
 };
 
 userSchema.methods.setPassword = async function (plain) {
   const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(plain, salt);
+  this.passwordHash = await bcrypt.hash(plain, salt);
 };
 
 userSchema.methods.toSafeJSON = function () {
   const obj = this.toObject({ versionKey: false });
-  delete obj.password;
+  delete obj.passwordHash;
   return obj;
 };
 
 userSchema.set("toJSON", {
   versionKey: false,
   transform: (_doc, ret) => {
-    delete ret.password;
+    delete ret.passwordHash;
     return ret;
   }
 });

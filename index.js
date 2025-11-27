@@ -39,16 +39,16 @@ connectDB();
 app.get("/", (_req, res) => res.send("Hotel Booking Business API OK"));
 
 // API 라우트
-app.use("/api/auth", authRoutes);
+app.use("/api/business/auth", authRoutes);
 app.use("/api/lodgings", lodgingRoutes);
-app.use("/api/rooms", roomRoutes);
-app.use("/api/bookings", bookingRoutes);  
-app.use("/api/stats", statsRoutes);
+app.use("/api/business/rooms", roomRoutes);
+app.use("/api/business/bookings", bookingRoutes);  
+app.use("/api/business/stats", statsRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/amenities", amenityRoutes);
 app.use("/api/notices", noticeRoutes);
 app.use("/api/pictures", pictureRoutes);
-app.use("/api/reviews", reviewRoutes);
+app.use("/api/business/reviews", reviewRoutes);
 
 // 404 핸들러
 app.use((req, res, next) => {

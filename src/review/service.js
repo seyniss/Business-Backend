@@ -55,7 +55,7 @@ const createReview = async (reviewData, userId) => {
 
   // 리뷰 정보와 함께 사용자 정보 포함하여 반환
   const populatedReview = await Review.findById(review._id)
-    .populate('user_id', 'user_name profile_image')
+    .populate('user_id', 'displayName profile_image')
     .populate('lodging_id', 'lodging_name')
     .lean();
 
@@ -162,7 +162,7 @@ const getBlockedReviews = async (userId) => {
     lodging_id: { $in: lodgingIds },
     status: 'blocked'
   })
-    .populate('user_id', 'user_name profile_image')
+    .populate('user_id', 'displayName profile_image')
     .populate('lodging_id', 'lodging_name')
     .sort({ blocked_at: -1 })
     .lean();
@@ -192,7 +192,7 @@ const getReviewsByLodging = async (lodgingId, filters) => {
   // 리뷰 조회
   const [reviews, total] = await Promise.all([
     Review.find(query)
-      .populate('user_id', 'user_name profile_image')
+      .populate('user_id', 'displayName profile_image')
       .populate('lodging_id', 'lodging_name')
       .populate({
         path: 'booking_id',
@@ -215,6 +215,210 @@ const getReviewsByLodging = async (lodgingId, filters) => {
     page: parseInt(page),
     limit: parseInt(limit),
     totalPages: Math.ceil(total / parseInt(limit))
+  };
+};
+
+// 사업자의 모든 숙소 리뷰 목록 조회
+const getReviews = async (userId, filters) => {
+  const { page = 1, limit = 20, status, rating } = filters;
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+
+  // 사업자 정보 조회
+  const business = await Business.findOne({ login_id: userId });
+  if (!business) {
+    throw new Error("BUSINESS_NOT_FOUND");
+  }
+
+  // 해당 사업자의 숙소 목록 조회
+  const lodgings = await Lodging.find({ business_id: business._id }).select('_id');
+  const lodgingIds = lodgings.map(l => l._id);
+
+  // 필터 조건
+  const query = {
+    lodging_id: { $in: lodgingIds }
+  };
+
+  // 상태 필터
+  if (status && ['active', 'blocked'].includes(status)) {
+    query.status = status;
+  }
+
+  // 평점 필터
+  if (rating && [1, 2, 3, 4, 5].includes(parseInt(rating))) {
+    query.rating = parseInt(rating);
+  }
+
+  // 리뷰 조회
+  const [reviews, total] = await Promise.all([
+    Review.find(query)
+      .populate('user_id', 'displayName profile_image')
+      .populate('lodging_id', 'lodging_name')
+      .populate({
+        path: 'booking_id',
+        select: 'checkin_date checkout_date booking_status',
+        populate: {
+          path: 'room_id',
+          select: 'room_name'
+        }
+      })
+      .sort({ created_at: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean(),
+    Review.countDocuments(query)
+  ]);
+
+  return {
+    reviews,
+    total,
+    page: parseInt(page),
+    limit: parseInt(limit),
+    totalPages: Math.ceil(total / parseInt(limit))
+  };
+};
+
+// 리뷰 상세 조회
+const getReviewById = async (reviewId, userId) => {
+  // 사업자 정보 조회
+  const business = await Business.findOne({ login_id: userId });
+  if (!business) {
+    throw new Error("BUSINESS_NOT_FOUND");
+  }
+
+  // 해당 사업자의 숙소 목록 조회
+  const lodgings = await Lodging.find({ business_id: business._id }).select('_id');
+  const lodgingIds = lodgings.map(l => l._id);
+
+  // 리뷰 조회 및 소유권 확인
+  const review = await Review.findOne({
+    _id: reviewId,
+    lodging_id: { $in: lodgingIds }
+  })
+    .populate('user_id', 'displayName profile_image')
+    .populate('lodging_id', 'lodging_name')
+    .populate({
+      path: 'booking_id',
+      select: 'checkin_date checkout_date booking_status',
+      populate: {
+        path: 'room_id',
+        select: 'room_name'
+      }
+    })
+    .lean();
+
+  if (!review) {
+    throw new Error("REVIEW_NOT_FOUND");
+  }
+
+  return review;
+};
+
+// 리뷰 답변
+const replyToReview = async (reviewId, reply, userId) => {
+  // 사업자 정보 조회
+  const business = await Business.findOne({ login_id: userId });
+  if (!business) {
+    throw new Error("BUSINESS_NOT_FOUND");
+  }
+
+  // 해당 사업자의 숙소 목록 조회
+  const lodgings = await Lodging.find({ business_id: business._id }).select('_id');
+  const lodgingIds = lodgings.map(l => l._id);
+
+  // 리뷰 조회 및 소유권 확인
+  const review = await Review.findOne({
+    _id: reviewId,
+    lodging_id: { $in: lodgingIds }
+  });
+
+  if (!review) {
+    throw new Error("REVIEW_NOT_FOUND");
+  }
+
+  // 답변 작성
+  review.reply = reply.trim();
+  review.reply_date = new Date();
+  await review.save();
+
+  // 답변 포함하여 반환
+  const populatedReview = await Review.findById(review._id)
+    .populate('user_id', 'displayName profile_image')
+    .populate('lodging_id', 'lodging_name')
+    .lean();
+
+  return populatedReview;
+};
+
+// 리뷰 통계
+const getReviewStats = async (userId) => {
+  // 사업자 정보 조회
+  const business = await Business.findOne({ login_id: userId });
+  if (!business) {
+    throw new Error("BUSINESS_NOT_FOUND");
+  }
+
+  // 해당 사업자의 숙소 목록 조회
+  const lodgings = await Lodging.find({ business_id: business._id }).select('_id');
+  const lodgingIds = lodgings.map(l => l._id);
+
+  // 전체 통계
+  const [totalReviews, activeReviews, blockedReviews, avgRating] = await Promise.all([
+    Review.countDocuments({ lodging_id: { $in: lodgingIds } }),
+    Review.countDocuments({ lodging_id: { $in: lodgingIds }, status: 'active' }),
+    Review.countDocuments({ lodging_id: { $in: lodgingIds }, status: 'blocked' }),
+    Review.aggregate([
+      {
+        $match: {
+          lodging_id: { $in: lodgingIds },
+          status: 'active'
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          avgRating: { $avg: '$rating' },
+          ratingCounts: {
+            $push: '$rating'
+          }
+        }
+      }
+    ])
+  ]);
+
+  // 평점별 개수 계산
+  const ratingCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  if (avgRating.length > 0 && avgRating[0].ratingCounts) {
+    avgRating[0].ratingCounts.forEach(rating => {
+      if (ratingCounts[rating] !== undefined) {
+        ratingCounts[rating]++;
+      }
+    });
+  }
+
+  // 답변 통계
+  const repliedReviews = await Review.countDocuments({
+    lodging_id: { $in: lodgingIds },
+    reply: { $ne: null }
+  });
+
+  // 최근 30일 리뷰 수
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const recentReviews = await Review.countDocuments({
+    lodging_id: { $in: lodgingIds },
+    created_at: { $gte: thirtyDaysAgo }
+  });
+
+  return {
+    overview: {
+      totalReviews,
+      activeReviews,
+      blockedReviews,
+      repliedReviews,
+      recentReviews,
+      avgRating: avgRating.length > 0 ? Math.round(avgRating[0].avgRating * 10) / 10 : 0
+    },
+    ratingDistribution: ratingCounts
   };
 };
 
@@ -241,12 +445,12 @@ const getReports = async (filters) => {
         },
         {
           path: 'user_id',
-          select: 'user_name'
+          select: 'displayName'
         }
       ]
     })
     .populate('business_id', 'business_name')
-    .populate('reviewed_by', 'user_name')
+    .populate('reviewed_by', 'displayName')
     .sort({ reported_at: -1 })
     .skip(skip)
     .limit(parseInt(limit))
@@ -269,6 +473,10 @@ module.exports = {
   blockReview,
   getBlockedReviews,
   getReviewsByLodging,
-  getReports
+  getReports,
+  getReviews,
+  getReviewById,
+  replyToReview,
+  getReviewStats
 };
 

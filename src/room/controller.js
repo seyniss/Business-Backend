@@ -2,10 +2,20 @@ const roomService = require("./service");
 const { successResponse, errorResponse } = require("../common/response");
 const mongoose = require("mongoose");
 
-// 숙소별 객실 목록 조회
-const getRoomsByLodging = async (req, res) => {
+// 객실 목록 조회 (쿼리 파라미터로 lodgingId 전달)
+const getRooms = async (req, res) => {
   try {
-    const result = await roomService.getRoomsByLodging(req.params.lodgingId, req.user.id);
+    const { lodgingId } = req.query;
+    
+    if (!lodgingId) {
+      return res.status(400).json(errorResponse("lodgingId 쿼리 파라미터가 필요합니다.", 400));
+    }
+    
+    if (!mongoose.Types.ObjectId.isValid(lodgingId)) {
+      return res.status(400).json(errorResponse("잘못된 lodgingId 형식입니다.", 400));
+    }
+
+    const result = await roomService.getRoomsByLodging(lodgingId, req.user.id);
     return res.status(200).json(successResponse(result, "SUCCESS", 200));
   } catch (error) {
     if (error.message === "BUSINESS_NOT_FOUND") {
@@ -166,11 +176,43 @@ const deleteRoom = async (req, res) => {
   }
 };
 
+// 객실 상태 변경
+const updateRoomStatus = async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json(errorResponse("잘못된 id 형식입니다.", 400));
+    }
+
+    const { status } = req.body;
+
+    if (!status || !['active', 'inactive', 'maintenance'].includes(status)) {
+      return res.status(400).json(errorResponse("유효하지 않은 상태입니다. (active, inactive, maintenance)", 400));
+    }
+
+    const result = await roomService.updateRoomStatus(req.params.id, status, req.user.id);
+    return res.status(200).json(successResponse(result, "객실 상태가 변경되었습니다.", 200));
+  } catch (error) {
+    console.error("PATCH /api/business/rooms/:id/status 실패", error);
+    
+    if (error.message === "ROOM_NOT_FOUND") {
+      return res.status(404).json(errorResponse("객실을 찾을 수 없습니다.", 404));
+    }
+    if (error.message === "LODGING_NOT_FOUND") {
+      return res.status(404).json(errorResponse("숙소를 찾을 수 없습니다.", 404));
+    }
+    if (error.message === "UNAUTHORIZED") {
+      return res.status(403).json(errorResponse("권한이 없습니다.", 403));
+    }
+    return res.status(500).json(errorResponse("서버 오류", 500, error.message));
+  }
+};
+
 module.exports = {
-  getRoomsByLodging,
+  getRooms,
   getRoomById,
   createRoom,
   updateRoom,
-  deleteRoom
+  deleteRoom,
+  updateRoomStatus
 };
 

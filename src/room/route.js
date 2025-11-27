@@ -5,11 +5,12 @@ const express = require("express");
 const router = express.Router();
 
 const {
-  getRoomsByLodging,
+  getRooms,
   getRoomById,
   createRoom,
   updateRoom,
   deleteRoom,
+  updateRoomStatus,
 } = require("./controller");
 const { authenticateToken, requireBusiness } = require("../common/authMiddleware");
 
@@ -17,19 +18,22 @@ const { authenticateToken, requireBusiness } = require("../common/authMiddleware
 router.use(authenticateToken);
 router.use(requireBusiness);
 
-// GET /api/rooms/lodging/:lodgingId → 숙소별 객실 목록 조회
-router.get("/lodging/:lodgingId", getRoomsByLodging);
+// GET /api/business/rooms → 객실 목록 조회 (쿼리 파라미터: lodgingId)
+router.get("/", getRooms);
 
-// GET /api/rooms/:id → 객실 상세 조회
-router.get("/:id", getRoomById);
-
-// POST /api/rooms → 객실 생성
+// POST /api/business/rooms → 객실 생성
 router.post("/", createRoom);
 
-// PUT /api/rooms/:id → 객실 수정
+// PATCH /api/business/rooms/:id/status → 객실 상태 변경 (/:id보다 먼저 정의)
+router.patch("/:id/status", updateRoomStatus);
+
+// GET /api/business/rooms/:id → 객실 상세 조회
+router.get("/:id", getRoomById);
+
+// PUT /api/business/rooms/:id → 객실 수정
 router.put("/:id", updateRoom);
 
-// DELETE /api/rooms/:id → 객실 삭제
+// DELETE /api/business/rooms/:id → 객실 삭제
 router.delete("/:id", deleteRoom);
 
 module.exports = router;

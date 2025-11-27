@@ -53,6 +53,18 @@ const reviewSchema = new mongoose.Schema(
     blocked_at: {
       type: Date,
       default: null
+    },
+    
+    reply: {
+      type: String,
+      trim: true,
+      default: null,
+      maxlength: 2000
+    },
+    
+    reply_date: {
+      type: Date,
+      default: null
     }
   },
   {

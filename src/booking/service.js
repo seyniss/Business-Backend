@@ -92,7 +92,7 @@ const createBooking = async (bookingData, userId, userRole) => {
     
     const [roomData, userData, payment] = await Promise.all([
       Room.findById(bookingObj.room_id).lean().catch(() => null),
-      User.findById(bookingObj.user_id).select('-password').lean().catch(() => null),
+      User.findById(bookingObj.user_id).lean().catch(() => null),
       Payment.findOne({ booking_id: bookingObj._id })
         .populate('payment_type_id')
         .lean()
@@ -191,7 +191,7 @@ const getBookings = async (filters, userId, userRole) => {
 
         const [room, user, payment] = await Promise.all([
           Room.findById(booking.room_id).lean().catch(() => null),
-          User.findById(booking.user_id).select('-password').lean().catch(() => null),
+          User.findById(booking.user_id).lean().catch(() => null),
           Payment.findOne({ booking_id: booking._id })
             .populate('payment_type_id')
             .lean()
@@ -262,7 +262,7 @@ const getBookingById = async (bookingId, userId, userRole) => {
 
   const [room, user, payment] = await Promise.all([
     Room.findById(booking.room_id).lean(),
-    User.findById(booking.user_id).select('-password').lean(),
+    User.findById(booking.user_id).lean(),
     Payment.findOne({ booking_id: booking._id })
       .populate('payment_type_id')
       .lean()
@@ -323,7 +323,7 @@ const updateBookingStatus = async (bookingId, status, cancellationReason, userId
 
   const [room, user, payment] = await Promise.all([
     Room.findById(updated.room_id).lean(),
-    User.findById(updated.user_id).select('-password').lean(),
+    User.findById(updated.user_id).lean(),
     Payment.findOne({ booking_id: updated._id })
       .populate('payment_type_id')
       .lean()
@@ -377,7 +377,7 @@ const updatePaymentStatus = async (bookingId, paymentStatus, userId) => {
 
   const [room, user, payment] = await Promise.all([
     Room.findById(updated.room_id).lean(),
-    User.findById(updated.user_id).select('-password').lean(),
+    User.findById(updated.user_id).lean(),
     Payment.findOne({ booking_id: bookingId })
       .populate('payment_type_id')
       .lean()
