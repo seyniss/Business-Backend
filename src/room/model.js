@@ -15,7 +15,7 @@ const roomSchema = new mongoose.Schema(
       trim: true,
       maxlength: 100
     },
-    
+     
     roomSize: {
       type: String,
       required: true,
