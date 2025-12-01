@@ -1,4 +1,4 @@
-# 변경 이력 (Changelog)
+# 변경 이력 (Changelog) - 2025.11.25
 
 ## [최신] 데이터 모델 리팩토링 - User & Business 분리
 
