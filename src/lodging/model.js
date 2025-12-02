@@ -17,12 +17,34 @@ const lodgingSchema = new mongoose.Schema(
       maxlength: 255
     },
     
-    starRating: {
+    rating: {
       type: Number,
       required: true,
       min: 1,
       max: 5,
       default: 3
+    },
+    
+    reviewCount: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    
+    minPrice: {
+      type: Number,
+      min: 0
+    },
+    
+    // 🗺️ 지도 좌표
+    lat: {
+      type: Number,
+      required: true
+    },
+    
+    lng: {
+      type: Number,
+      required: true
     },
     
     description: {
@@ -89,8 +111,10 @@ const lodgingSchema = new mongoose.Schema(
 lodgingSchema.index({ businessId: 1, createdAt: -1 });
 lodgingSchema.index({ country: 1 });
 lodgingSchema.index({ category: 1 });
-lodgingSchema.index({ starRating: -1 });
+lodgingSchema.index({ rating: -1 });
 lodgingSchema.index({ amenityId: 1 });
+// 지도 좌표를 위한 2dsphere 인덱스 (지도 API 쿼리 최적화)
+lodgingSchema.index({ lat: 1, lng: 1 });
 
 module.exports = mongoose.model('Lodging', lodgingSchema);
 

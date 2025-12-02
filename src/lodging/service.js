@@ -3,6 +3,7 @@ const Amenity = require("../amenity/model");
 const Booking = require("../booking/model");
 const Room = require("../room/model");
 const Business = require("../auth/business");
+const { addressToCoordinates } = require("../common/kakaoMap");
 
 // 숙소 목록 조회
 const getLodgings = async (userId) => {
@@ -52,14 +53,18 @@ const createLodging = async (lodgingData, userId) => {
   const {
     lodgingName,
     address,
-    starRating,
+    rating,
     description,
     images,
     country,
     category,
     hashtag,
     amenityName,
-    amenityDetail
+    amenityDetail,
+    minPrice,
+    lat,
+    lng,
+    reviewCount
   } = lodgingData;
 
   const business = await Business.findOne({ loginId: userId });
@@ -94,17 +99,34 @@ const createLodging = async (lodgingData, userId) => {
     imagesArray = [images];
   }
 
+  // 주소를 좌표로 변환 (lat, lng가 제공되지 않은 경우)
+  let coordinates = { lat, lng };
+  if (!lat || !lng) {
+    if (!address) {
+      throw new Error("주소 또는 좌표가 필요합니다.");
+    }
+    try {
+      coordinates = await addressToCoordinates(address);
+    } catch (error) {
+      throw new Error(`좌표 변환 실패: ${error.message}`);
+    }
+  }
+
   const lodging = await Lodging.create({
     businessId: business._id,
     lodgingName,
     address,
-    starRating,
+    rating,
     description,
     images: imagesArray,
     country,
     category,
     hashtag: hashtagArray,
-    amenityId: amenity ? amenity._id : null
+    amenityId: amenity ? amenity._id : null,
+    minPrice: minPrice !== undefined ? minPrice : undefined,
+    lat: coordinates.lat,
+    lng: coordinates.lng,
+    reviewCount: reviewCount !== undefined ? reviewCount : 0
   });
 
   const createdLodging = await Lodging.findById(lodging._id)
@@ -132,7 +154,7 @@ const updateLodging = async (lodgingId, lodgingData, userId) => {
   const {
     lodgingName,
     address,
-    starRating,
+    rating,
     description,
     images,
     country,
@@ -140,14 +162,20 @@ const updateLodging = async (lodgingId, lodgingData, userId) => {
     userName,
     hashtag,
     amenityName,
-    amenityDetail
+    amenityDetail,
+    minPrice,
+    lat,
+    lng,
+    reviewCount
   } = lodgingData;
 
   const updates = {};
   if (lodgingName !== undefined) updates.lodgingName = lodgingName;
   if (address !== undefined) updates.address = address;
-  if (starRating !== undefined) updates.starRating = starRating;
+  if (rating !== undefined) updates.rating = rating;
   if (description !== undefined) updates.description = description;
+  if (minPrice !== undefined) updates.minPrice = minPrice;
+  if (reviewCount !== undefined) updates.reviewCount = reviewCount;
   if (images !== undefined) {
     if (Array.isArray(images)) {
       updates.images = images.filter(img => img && img.trim().length > 0);
@@ -173,6 +201,27 @@ const updateLodging = async (lodgingId, lodgingData, userId) => {
       updates.amenityId = amenity._id;
     } else {
       updates.amenityId = null;
+    }
+  }
+
+  // 주소가 변경되었거나 lat/lng가 제공되지 않은 경우 좌표 재변환
+  if (address !== undefined || lat !== undefined || lng !== undefined) {
+    if (lat !== undefined && lng !== undefined) {
+      // 좌표가 직접 제공된 경우
+      updates.lat = lat;
+      updates.lng = lng;
+    } else {
+      // 주소를 기반으로 좌표 변환
+      const addressToUse = address !== undefined ? address : lodging.address;
+      if (addressToUse) {
+        try {
+          const coordinates = await addressToCoordinates(addressToUse);
+          updates.lat = coordinates.lat;
+          updates.lng = coordinates.lng;
+        } catch (error) {
+          throw new Error(`좌표 변환 실패: ${error.message}`);
+        }
+      }
     }
   }
 
