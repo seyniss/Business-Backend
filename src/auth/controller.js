@@ -12,7 +12,7 @@ const register = async (req, res) => {
     }
 
     // 사업자로 가입하는 경우 사업자 정보 필수
-    if (role === "BUSINESS") {
+    if (role && role.toLowerCase() === "business") {
       if (!businessName || !businessNumber) {
         return res.status(400).json(errorResponse("사업자로 가입하는 경우 사업자명과 사업자등록번호는 필수입니다.", 400));
       }

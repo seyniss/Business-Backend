@@ -51,8 +51,7 @@ const createLodging = async (req, res) => {
       amenityDetail,
       minPrice,
       lat,
-      lng,
-      reviewCount
+      lng
     } = req.body;
 
     // 필수 필드 검증
@@ -89,11 +88,6 @@ const createLodging = async (req, res) => {
       return res.status(400).json(errorResponse("경도(lng)는 -180과 180 사이의 값이어야 합니다.", 400));
     }
 
-    // reviewCount 검증
-    if (reviewCount !== undefined && (typeof reviewCount !== 'number' || reviewCount < 0)) {
-      return res.status(400).json(errorResponse("리뷰 개수는 0 이상의 숫자여야 합니다.", 400));
-    }
-
     const result = await lodgingService.createLodging({
       lodgingName,
       address,
@@ -107,8 +101,7 @@ const createLodging = async (req, res) => {
       amenityDetail,
       minPrice,
       lat,
-      lng,
-      reviewCount
+      lng
     }, req.user.id);
 
     return res.status(201).json(successResponse(result, "숙소가 생성되었습니다.", 201));
@@ -143,8 +136,7 @@ const updateLodging = async (req, res) => {
       amenityDetail,
       minPrice,
       lat,
-      lng,
-      reviewCount
+      lng
     } = req.body;
 
     // 유효성 검증
@@ -170,11 +162,6 @@ const updateLodging = async (req, res) => {
       return res.status(400).json(errorResponse("경도(lng)는 -180과 180 사이의 값이어야 합니다.", 400));
     }
 
-    // reviewCount 검증
-    if (reviewCount !== undefined && (typeof reviewCount !== 'number' || reviewCount < 0)) {
-      return res.status(400).json(errorResponse("리뷰 개수는 0 이상의 숫자여야 합니다.", 400));
-    }
-
     const result = await lodgingService.updateLodging(req.params.id, {
       lodgingName,
       address,
@@ -188,8 +175,7 @@ const updateLodging = async (req, res) => {
       amenityDetail,
       minPrice,
       lat,
-      lng,
-      reviewCount
+      lng
     }, req.user.id);
 
     return res.status(200).json(successResponse(result, "숙소가 수정되었습니다.", 200));

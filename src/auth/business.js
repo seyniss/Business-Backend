@@ -7,7 +7,8 @@ const businessSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      unique: true
+      unique: true,
+      sparse: true
     },
 
     // 🏨 사업자 정보

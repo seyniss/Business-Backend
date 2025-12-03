@@ -7,7 +7,7 @@ const Business = require("../auth/business");
 const createOrUpdateNotice = async (noticeData, userId) => {
   const { room_id, content, usage_guide, introduction } = noticeData;
 
-  const business = await Business.findOne({ login_id: userId });
+  const business = await Business.findOne({ loginId: userId });
   if (!business) {
     throw new Error("BUSINESS_NOT_FOUND");
   }
@@ -48,7 +48,7 @@ const getNoticeByRoom = async (roomId, userId) => {
     throw new Error("ROOM_NOT_FOUND");
   }
 
-  const business = await Business.findOne({ login_id: userId });
+  const business = await Business.findOne({ loginId: userId });
   if (!business) {
     throw new Error("BUSINESS_NOT_FOUND");
   }
@@ -76,7 +76,7 @@ const updateNotice = async (noticeId, noticeData, userId) => {
     throw new Error("ROOM_NOT_FOUND");
   }
 
-  const business = await Business.findOne({ login_id: userId });
+  const business = await Business.findOne({ loginId: userId });
   if (!business) {
     throw new Error("BUSINESS_NOT_FOUND");
   }

@@ -7,45 +7,45 @@ const Room = require("../room/model");
 
 // 리뷰 작성
 const createReview = async (reviewData, userId) => {
-  const { lodging_id, booking_id, rating, content, images } = reviewData;
+  const { lodgingId, bookingId, rating, content, images } = reviewData;
 
   // 예약 존재 여부 확인
-  const booking = await Booking.findById(booking_id);
+  const booking = await Booking.findById(bookingId);
   if (!booking) {
     throw new Error("BOOKING_NOT_FOUND");
   }
 
   // 사용자 일치 확인
-  if (booking.user_id.toString() !== userId) {
+  if (booking.userId.toString() !== userId) {
     throw new Error("UNAUTHORIZED");
   }
 
   // 예약 상태 확인
-  if (!['confirmed', 'completed'].includes(booking.booking_status)) {
+  if (!['confirmed', 'completed'].includes(booking.bookingStatus)) {
     throw new Error("INVALID_BOOKING_STATUS");
   }
 
-  // 해당 예약의 room_id로 lodging_id 확인
-  const room = await Room.findById(booking.room_id);
+  // 해당 예약의 roomId로 lodgingId 확인
+  const room = await Room.findById(booking.roomId);
   if (!room) {
     throw new Error("ROOM_NOT_FOUND");
   }
 
-  if (room.lodging_id.toString() !== lodging_id) {
+  if (room.lodgingId.toString() !== lodgingId) {
     throw new Error("LODGING_MISMATCH");
   }
 
   // 이미 리뷰를 작성했는지 확인
-  const existingReview = await Review.findOne({ booking_id: booking_id });
+  const existingReview = await Review.findOne({ bookingId: bookingId });
   if (existingReview) {
     throw new Error("REVIEW_ALREADY_EXISTS");
   }
 
   // 리뷰 생성
   const review = new Review({
-    lodging_id,
-    user_id: userId,
-    booking_id,
+    lodgingId,
+    userId: userId,
+    bookingId,
     rating,
     content,
     images: images || []
@@ -53,10 +53,17 @@ const createReview = async (reviewData, userId) => {
 
   await review.save();
 
+  // Lodging의 reviewCount 증가 (status가 'active'인 경우)
+  if (review.status === 'active') {
+    await Lodging.findByIdAndUpdate(lodgingId, {
+      $inc: { reviewCount: 1 }
+    });
+  }
+
   // 리뷰 정보와 함께 사용자 정보 포함하여 반환
   const populatedReview = await Review.findById(review._id)
-    .populate('user_id', 'name profile_image')
-    .populate('lodging_id', 'lodging_name')
+    .populate('userId', 'name profileImage')
+    .populate('lodgingId', 'lodgingName')
     .lean();
 
   return populatedReview;
@@ -65,26 +72,26 @@ const createReview = async (reviewData, userId) => {
 // 리뷰 신고
 const reportReview = async (reviewId, reason, userId) => {
   // 리뷰 확인
-  const review = await Review.findById(reviewId).populate('lodging_id', 'business_id');
+  const review = await Review.findById(reviewId).populate('lodgingId', 'businessId');
   if (!review) {
     throw new Error("REVIEW_NOT_FOUND");
   }
 
   // 사업자 정보 조회
-  const business = await Business.findOne({ login_id: userId });
+  const business = await Business.findOne({ loginId: userId });
   if (!business) {
     throw new Error("BUSINESS_NOT_FOUND");
   }
 
   // 해당 호텔의 소유자인지 확인
-  if (review.lodging_id.business_id.toString() !== business._id.toString()) {
+  if (review.lodgingId.businessId.toString() !== business._id.toString()) {
     throw new Error("UNAUTHORIZED");
   }
 
   // 이미 신고했는지 확인
   const existingReport = await ReviewReport.findOne({
-    review_id: reviewId,
-    business_id: business._id
+    reviewId: reviewId,
+    businessId: business._id
   });
 
   if (existingReport) {
@@ -93,8 +100,8 @@ const reportReview = async (reviewId, reason, userId) => {
 
   // 신고 생성
   const report = new ReviewReport({
-    review_id: reviewId,
-    business_id: business._id,
+    reviewId: reviewId,
+    businessId: business._id,
     reason: reason.trim()
   });
 
@@ -102,29 +109,32 @@ const reportReview = async (reviewId, reason, userId) => {
 
   return {
     _id: report._id,
-    review_id: report.review_id,
+    reviewId: report.reviewId,
     reason: report.reason,
     status: report.status,
-    reported_at: report.reported_at
+    reportedAt: report.reportedAt
   };
 };
 
 // 리뷰 차단
 const blockReview = async (reviewId, userId) => {
-  // 리뷰 확인
-  const review = await Review.findById(reviewId).populate('lodging_id', 'business_id');
+  // 리뷰 확인 (lodgingId를 populate하여 businessId 확인)
+  const review = await Review.findById(reviewId).populate('lodgingId', 'businessId');
   if (!review) {
     throw new Error("REVIEW_NOT_FOUND");
   }
 
+  // lodgingId 저장 (populate 전 원본 ObjectId)
+  const lodgingId = review.lodgingId._id || review.lodgingId;
+
   // 사업자 정보 조회
-  const business = await Business.findOne({ login_id: userId });
+  const business = await Business.findOne({ loginId: userId });
   if (!business) {
     throw new Error("BUSINESS_NOT_FOUND");
   }
 
   // 해당 호텔의 소유자인지 확인
-  if (review.lodging_id.business_id.toString() !== business._id.toString()) {
+  if (review.lodgingId.businessId.toString() !== business._id.toString()) {
     throw new Error("UNAUTHORIZED");
   }
 
@@ -134,37 +144,45 @@ const blockReview = async (reviewId, userId) => {
   }
 
   // 리뷰 차단
+  const wasActive = review.status === 'active';
   review.status = 'blocked';
-  review.blocked_at = new Date();
+  review.blockedAt = new Date();
   await review.save();
+
+  // Lodging의 reviewCount 감소 (active -> blocked인 경우)
+  if (wasActive) {
+    await Lodging.findByIdAndUpdate(lodgingId, {
+      $inc: { reviewCount: -1 }
+    });
+  }
 
   return {
     _id: review._id,
     status: review.status,
-    blocked_at: review.blocked_at
+    blockedAt: review.blockedAt
   };
 };
 
 // 차단된 리뷰 목록 조회
 const getBlockedReviews = async (userId) => {
   // 사업자 정보 조회
-  const business = await Business.findOne({ login_id: userId });
+  const business = await Business.findOne({ loginId: userId });
   if (!business) {
     throw new Error("BUSINESS_NOT_FOUND");
   }
 
   // 해당 사업자의 호텔 목록 조회
-  const lodgings = await Lodging.find({ business_id: business._id }).select('_id');
+  const lodgings = await Lodging.find({ businessId: business._id }).select('_id');
   const lodgingIds = lodgings.map(l => l._id);
 
   // 차단된 리뷰 조회
   const blockedReviews = await Review.find({
-    lodging_id: { $in: lodgingIds },
+    lodgingId: { $in: lodgingIds },
     status: 'blocked'
   })
-    .populate('user_id', 'name profile_image')
-    .populate('lodging_id', 'lodging_name')
-    .sort({ blocked_at: -1 })
+    .populate('userId', 'name profileImage')
+    .populate('lodgingId', 'lodgingName')
+    .sort({ blockedAt: -1 })
     .lean();
 
   return {
@@ -180,7 +198,7 @@ const getReviewsByLodging = async (lodgingId, filters) => {
 
   // 필터 조건
   const query = {
-    lodging_id: lodgingId,
+    lodgingId: lodgingId,
     status: 'active' // 차단되지 않은 활성 리뷰만
   };
 
@@ -192,17 +210,17 @@ const getReviewsByLodging = async (lodgingId, filters) => {
   // 리뷰 조회
   const [reviews, total] = await Promise.all([
     Review.find(query)
-      .populate('user_id', 'name profile_image')
-      .populate('lodging_id', 'lodging_name')
+      .populate('userId', 'name profileImage')
+      .populate('lodgingId', 'lodgingName')
       .populate({
-        path: 'booking_id',
-        select: 'checkin_date checkout_date booking_status',
+        path: 'bookingId',
+        select: 'checkinDate checkoutDate bookingStatus',
         populate: {
-          path: 'room_id',
-          select: 'room_name'
+          path: 'roomId',
+          select: 'roomName'
         }
       })
-      .sort({ created_at: -1 }) // 최신순 정렬
+      .sort({ createdAt: -1 }) // 최신순 정렬
       .skip(skip)
       .limit(parseInt(limit))
       .lean(),
@@ -224,18 +242,18 @@ const getReviews = async (userId, filters) => {
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
   // 사업자 정보 조회
-  const business = await Business.findOne({ login_id: userId });
+  const business = await Business.findOne({ loginId: userId });
   if (!business) {
     throw new Error("BUSINESS_NOT_FOUND");
   }
 
   // 해당 사업자의 숙소 목록 조회
-  const lodgings = await Lodging.find({ business_id: business._id }).select('_id');
+  const lodgings = await Lodging.find({ businessId: business._id }).select('_id');
   const lodgingIds = lodgings.map(l => l._id);
 
   // 필터 조건
   const query = {
-    lodging_id: { $in: lodgingIds }
+    lodgingId: { $in: lodgingIds }
   };
 
   // 상태 필터
@@ -251,17 +269,17 @@ const getReviews = async (userId, filters) => {
   // 리뷰 조회
   const [reviews, total] = await Promise.all([
     Review.find(query)
-      .populate('user_id', 'name profile_image')
-      .populate('lodging_id', 'lodging_name')
+      .populate('userId', 'name profileImage')
+      .populate('lodgingId', 'lodgingName')
       .populate({
-        path: 'booking_id',
-        select: 'checkin_date checkout_date booking_status',
+        path: 'bookingId',
+        select: 'checkinDate checkoutDate bookingStatus',
         populate: {
-          path: 'room_id',
-          select: 'room_name'
+          path: 'roomId',
+          select: 'roomName'
         }
       })
-      .sort({ created_at: -1 })
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit))
       .lean(),
@@ -280,28 +298,28 @@ const getReviews = async (userId, filters) => {
 // 리뷰 상세 조회
 const getReviewById = async (reviewId, userId) => {
   // 사업자 정보 조회
-  const business = await Business.findOne({ login_id: userId });
+  const business = await Business.findOne({ loginId: userId });
   if (!business) {
     throw new Error("BUSINESS_NOT_FOUND");
   }
 
   // 해당 사업자의 숙소 목록 조회
-  const lodgings = await Lodging.find({ business_id: business._id }).select('_id');
+  const lodgings = await Lodging.find({ businessId: business._id }).select('_id');
   const lodgingIds = lodgings.map(l => l._id);
 
   // 리뷰 조회 및 소유권 확인
   const review = await Review.findOne({
     _id: reviewId,
-    lodging_id: { $in: lodgingIds }
+    lodgingId: { $in: lodgingIds }
   })
-    .populate('user_id', 'name profile_image')
-    .populate('lodging_id', 'lodging_name')
+    .populate('userId', 'name profileImage')
+    .populate('lodgingId', 'lodgingName')
     .populate({
-      path: 'booking_id',
-      select: 'checkin_date checkout_date booking_status',
+      path: 'bookingId',
+      select: 'checkinDate checkoutDate bookingStatus',
       populate: {
-        path: 'room_id',
-        select: 'room_name'
+        path: 'roomId',
+        select: 'roomName'
       }
     })
     .lean();
@@ -316,19 +334,19 @@ const getReviewById = async (reviewId, userId) => {
 // 리뷰 답변
 const replyToReview = async (reviewId, reply, userId) => {
   // 사업자 정보 조회
-  const business = await Business.findOne({ login_id: userId });
+  const business = await Business.findOne({ loginId: userId });
   if (!business) {
     throw new Error("BUSINESS_NOT_FOUND");
   }
 
   // 해당 사업자의 숙소 목록 조회
-  const lodgings = await Lodging.find({ business_id: business._id }).select('_id');
+  const lodgings = await Lodging.find({ businessId: business._id }).select('_id');
   const lodgingIds = lodgings.map(l => l._id);
 
   // 리뷰 조회 및 소유권 확인
   const review = await Review.findOne({
     _id: reviewId,
-    lodging_id: { $in: lodgingIds }
+    lodgingId: { $in: lodgingIds }
   });
 
   if (!review) {
@@ -337,13 +355,13 @@ const replyToReview = async (reviewId, reply, userId) => {
 
   // 답변 작성
   review.reply = reply.trim();
-  review.reply_date = new Date();
+  review.replyDate = new Date();
   await review.save();
 
   // 답변 포함하여 반환
   const populatedReview = await Review.findById(review._id)
-    .populate('user_id', 'name profile_image')
-    .populate('lodging_id', 'lodging_name')
+    .populate('userId', 'name profileImage')
+    .populate('lodgingId', 'lodgingName')
     .lean();
 
   return populatedReview;
@@ -352,24 +370,24 @@ const replyToReview = async (reviewId, reply, userId) => {
 // 리뷰 통계
 const getReviewStats = async (userId) => {
   // 사업자 정보 조회
-  const business = await Business.findOne({ login_id: userId });
+  const business = await Business.findOne({ loginId: userId });
   if (!business) {
     throw new Error("BUSINESS_NOT_FOUND");
   }
 
   // 해당 사업자의 숙소 목록 조회
-  const lodgings = await Lodging.find({ business_id: business._id }).select('_id');
+  const lodgings = await Lodging.find({ businessId: business._id }).select('_id');
   const lodgingIds = lodgings.map(l => l._id);
 
   // 전체 통계
   const [totalReviews, activeReviews, blockedReviews, avgRating] = await Promise.all([
-    Review.countDocuments({ lodging_id: { $in: lodgingIds } }),
-    Review.countDocuments({ lodging_id: { $in: lodgingIds }, status: 'active' }),
-    Review.countDocuments({ lodging_id: { $in: lodgingIds }, status: 'blocked' }),
+    Review.countDocuments({ lodgingId: { $in: lodgingIds } }),
+    Review.countDocuments({ lodgingId: { $in: lodgingIds }, status: 'active' }),
+    Review.countDocuments({ lodgingId: { $in: lodgingIds }, status: 'blocked' }),
     Review.aggregate([
       {
         $match: {
-          lodging_id: { $in: lodgingIds },
+          lodgingId: { $in: lodgingIds },
           status: 'active'
         }
       },
@@ -397,7 +415,7 @@ const getReviewStats = async (userId) => {
 
   // 답변 통계
   const repliedReviews = await Review.countDocuments({
-    lodging_id: { $in: lodgingIds },
+    lodgingId: { $in: lodgingIds },
     reply: { $ne: null }
   });
 
@@ -405,8 +423,8 @@ const getReviewStats = async (userId) => {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const recentReviews = await Review.countDocuments({
-    lodging_id: { $in: lodgingIds },
-    created_at: { $gte: thirtyDaysAgo }
+    lodgingId: { $in: lodgingIds },
+    createdAt: { $gte: thirtyDaysAgo }
   });
 
   return {
@@ -436,22 +454,22 @@ const getReports = async (filters) => {
   // 신고 내역 조회
   const reports = await ReviewReport.find(filter)
     .populate({
-      path: 'review_id',
-      select: 'rating content status created_at',
+      path: 'reviewId',
+      select: 'rating content status createdAt',
       populate: [
         {
-          path: 'lodging_id',
-          select: 'lodging_name'
+          path: 'lodgingId',
+          select: 'lodgingName'
         },
         {
-          path: 'user_id',
+          path: 'userId',
           select: 'name'
         }
       ]
     })
-    .populate('business_id', 'business_name')
-    .populate('reviewed_by', 'name')
-    .sort({ reported_at: -1 })
+    .populate('businessId', 'businessName')
+    .populate('reviewedBy', 'name')
+    .sort({ reportedAt: -1 })
     .skip(skip)
     .limit(parseInt(limit))
     .lean();

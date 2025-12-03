@@ -24,7 +24,7 @@ function urlToKey(u) {
 
 // 객실별 사진 목록 조회
 const getPicturesByRoom = async (roomId, userId) => {
-  const business = await Business.findOne({ login_id: userId });
+  const business = await Business.findOne({ loginId: userId });
   if (!business) {
     throw new Error("BUSINESS_NOT_FOUND");
   }
@@ -57,7 +57,7 @@ const getPicturesByRoom = async (roomId, userId) => {
 const createPicture = async (pictureData, userId) => {
   const { room_id, picture_name, picture_url } = pictureData;
 
-  const business = await Business.findOne({ login_id: userId });
+  const business = await Business.findOne({ loginId: userId });
   if (!business) {
     throw new Error("BUSINESS_NOT_FOUND");
   }
@@ -87,7 +87,7 @@ const createPicture = async (pictureData, userId) => {
 
 // 사진 삭제
 const deletePicture = async (pictureId, userId) => {
-  const business = await Business.findOne({ login_id: userId });
+  const business = await Business.findOne({ loginId: userId });
   if (!business) {
     throw new Error("BUSINESS_NOT_FOUND");
   }

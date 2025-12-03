@@ -33,7 +33,7 @@ function processImageUrls(room) {
 
 // 객실 목록 조회 (쿼리 파라미터로 lodgingId 전달)
 const getRooms = async (lodgingId, userId) => {
-  const business = await Business.findOne({ login_id: userId });
+  const business = await Business.findOne({ loginId: userId });
   if (!business) {
     throw new Error("BUSINESS_NOT_FOUND");
   }
@@ -85,7 +85,7 @@ const getRoomById = async (roomId, userId) => {
     throw new Error("LODGING_NOT_FOUND");
   }
 
-  const business = await Business.findOne({ login_id: userId });
+  const business = await Business.findOne({ loginId: userId });
   if (!business || String(lodging.business_id) !== String(business._id)) {
     throw new Error("UNAUTHORIZED");
   }
@@ -123,7 +123,7 @@ const createRoom = async (roomData, userId) => {
     room_image
   } = roomData;
 
-  const business = await Business.findOne({ login_id: userId });
+  const business = await Business.findOne({ loginId: userId });
   if (!business) {
     throw new Error("BUSINESS_NOT_FOUND");
   }
@@ -167,7 +167,7 @@ const updateRoom = async (roomId, roomData, userId) => {
     throw new Error("LODGING_NOT_FOUND");
   }
 
-  const business = await Business.findOne({ login_id: userId });
+  const business = await Business.findOne({ loginId: userId });
   if (!business || String(lodging.business_id) !== String(business._id)) {
     throw new Error("UNAUTHORIZED");
   }
@@ -220,7 +220,7 @@ const updateRoomStatus = async (roomId, status, userId) => {
     throw new Error("LODGING_NOT_FOUND");
   }
 
-  const business = await Business.findOne({ login_id: userId });
+  const business = await Business.findOne({ loginId: userId });
   if (!business || String(lodging.business_id) !== String(business._id)) {
     throw new Error("UNAUTHORIZED");
   }
@@ -243,7 +243,7 @@ const deleteRoom = async (roomId, userId) => {
     throw new Error("LODGING_NOT_FOUND");
   }
 
-  const business = await Business.findOne({ login_id: userId });
+  const business = await Business.findOne({ loginId: userId });
   if (!business || String(lodging.business_id) !== String(business._id)) {
     throw new Error("UNAUTHORIZED");
   }

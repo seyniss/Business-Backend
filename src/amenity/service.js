@@ -6,7 +6,7 @@ const Business = require("../auth/business");
 const createOrUpdateAmenity = async (amenityData, lodgingId, userId) => {
   const { amenity_name, amenity_detail } = amenityData;
 
-  const business = await Business.findOne({ login_id: userId });
+  const business = await Business.findOne({ loginId: userId });
   if (!business) {
     throw new Error("BUSINESS_NOT_FOUND");
   }
@@ -41,7 +41,7 @@ const createOrUpdateAmenity = async (amenityData, lodgingId, userId) => {
 
 // 숙소별 편의시설 조회
 const getAmenityByLodging = async (lodgingId, userId) => {
-  const business = await Business.findOne({ login_id: userId });
+  const business = await Business.findOne({ loginId: userId });
   if (!business) {
     throw new Error("BUSINESS_NOT_FOUND");
   }
@@ -67,7 +67,7 @@ const getAmenityByLodging = async (lodgingId, userId) => {
 const updateAmenity = async (amenityId, amenityData, userId) => {
   const { amenity_name, amenity_detail } = amenityData;
 
-  const business = await Business.findOne({ login_id: userId });
+  const business = await Business.findOne({ loginId: userId });
   if (!business) {
     throw new Error("BUSINESS_NOT_FOUND");
   }

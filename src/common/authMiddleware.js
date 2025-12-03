@@ -56,12 +56,12 @@ const requireRole = (role) => (req, res, next) => {
 };
 
 const requireBusiness = (req, res, next) => {
-  if (req.user?.role === 'BUSINESS') return next();
+  if (req.user?.role === 'business') return next();
   return res.status(403).json(errorResponse('사업자 권한이 필요합니다.', 403));
 };
 
 const requireAdmin = (req, res, next) => {
-  if (req.user?.role === 'ADMIN') return next();
+  if (req.user?.role === 'admin') return next();
   return res.status(403).json(errorResponse('관리자 권한이 필요합니다.', 403));
 };
 

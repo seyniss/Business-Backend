@@ -1,6 +1,7 @@
 const User = require("./model");
 const Business = require("./business");
 const jwt = require("jsonwebtoken");
+const mongoose = require("mongoose");
 
 const LOCK_MAX = 5;
 const LOCKOUT_DURATION_MS = 10 * 60 * 1000; // 10분
@@ -24,30 +25,41 @@ const makeToken = (user) => {
 const register = async (userData) => {
   const { email, password, name, phoneNumber, dateOfBirth, address, profileImage, role, businessName, businessNumber } = userData;
 
-  // 이메일 중복 검사
+  // [DEBUG] 이메일 중복 검사
+  // 에러 발생 시: 이미 존재하는 이메일로 회원가입 시도
   const existingUser = await User.findOne({ email: email.toLowerCase() });
   if (existingUser) {
+    console.error(`[REGISTER ERROR] EMAIL_ALREADY_EXISTS - email: ${email}, existingUserId: ${existingUser._id}`);
     throw new Error("EMAIL_ALREADY_EXISTS");
   }
 
-  // role 검증 (USER, BUSINESS, ADMIN 중 하나)
-  const validRoles = ["USER", "BUSINESS", "ADMIN"];
-  const userRole = role && validRoles.includes(role) ? role : "USER";
+  // [DEBUG] role 검증 (user, business, admin 중 하나)
+  // 에러 발생 시: 잘못된 role 값이 전달됨 (기본값: user)
+  const validRoles = ["user", "business", "admin"];
+  const userRole = role && validRoles.includes(role.toLowerCase()) ? role.toLowerCase() : "user";
+  if (role && !validRoles.includes(role.toLowerCase())) {
+    console.warn(`[REGISTER WARN] Invalid role provided: ${role}, using default: user`);
+  }
 
-  // 사업자로 가입하는 경우 사업자 정보 검증
-  if (userRole === "BUSINESS") {
+  // [DEBUG] 사업자로 가입하는 경우 사업자 정보 검증
+  // 에러 발생 시: businessName 또는 businessNumber가 누락됨
+  if (userRole === "business") {
     if (!businessName || !businessNumber) {
+      console.error(`[REGISTER ERROR] BUSINESS_INFO_REQUIRED - email: ${email}, businessName: ${businessName}, businessNumber: ${businessNumber}`);
       throw new Error("BUSINESS_INFO_REQUIRED");
     }
 
-    // 사업자등록번호 중복 검사
+    // [DEBUG] 사업자등록번호 중복 검사
+    // 에러 발생 시: 이미 등록된 사업자등록번호로 회원가입 시도
     const existingBusiness = await Business.findOne({ businessNumber });
     if (existingBusiness) {
+      console.error(`[REGISTER ERROR] BUSINESS_NUMBER_ALREADY_EXISTS - businessNumber: ${businessNumber}, existingBusinessId: ${existingBusiness._id}, existingLoginId: ${existingBusiness.loginId}`);
       throw new Error("BUSINESS_NUMBER_ALREADY_EXISTS");
     }
   }
 
-  // User 인스턴스 생성 (passwordHash는 setPassword에서 설정)
+  // [DEBUG] User 인스턴스 생성 (passwordHash는 setPassword에서 설정)
+  // 에러 발생 시: User 스키마 검증 실패 또는 필수 필드 누락
   const user = new User({
     email: email.toLowerCase(),
     name,
@@ -59,22 +71,133 @@ const register = async (userData) => {
     isActive: true
   });
 
-  // 비밀번호 해싱 및 저장
-  await user.setPassword(password);
-  await user.save();
+  // [DEBUG] 비밀번호 해싱 및 저장
+  // 에러 발생 시: 비밀번호 해싱 실패 또는 User 저장 실패 (중복 키, 검증 오류 등)
+  try {
+    await user.setPassword(password);
+    await user.save();
+    
+    // [DEBUG] user._id 검증 및 타입 확인
+    if (!user._id) {
+      console.error(`[REGISTER ERROR] User._id is null/undefined after save - email: ${email}`);
+      throw new Error("USER_ID_NOT_GENERATED");
+    }
+    
+    console.log(`[REGISTER SUCCESS] User created - userId: ${user._id}, userId type: ${typeof user._id}, userId constructor: ${user._id.constructor.name}, email: ${email}, role: ${userRole}`);
+  } catch (userSaveError) {
+    console.error(`[REGISTER ERROR] User save failed - email: ${email}, error: ${userSaveError.message}, code: ${userSaveError.code}`);
+    throw userSaveError;
+  }
 
-  // 사업자로 가입하는 경우 Business 모델에도 등록
-  if (userRole === "BUSINESS") {
-    await Business.create({
-      loginId: user._id,
-      businessName,
-      businessNumber
-    });
+  // [DEBUG] 사업자로 가입하는 경우 Business 모델에도 등록
+  // 에러 발생 시: Business 생성 실패 (중복 키, unique 인덱스 충돌 등)
+  if (userRole === "business") {
+    // [DEBUG] user._id 재검증 (Business 생성 전)
+    if (!user._id) {
+      console.error(`[REGISTER ERROR] User._id is null/undefined before Business creation - email: ${email}`);
+      throw new Error("USER_ID_MISSING");
+    }
+    
+    // [DEBUG] user._id를 명시적으로 ObjectId로 변환
+    let loginId;
+    try {
+      // user._id가 이미 ObjectId인지 확인
+      if (user._id instanceof mongoose.Types.ObjectId) {
+        loginId = user._id;
+        console.log(`[REGISTER DEBUG] user._id is already ObjectId - userId: ${user._id}`);
+      } else {
+        // 문자열이거나 다른 타입인 경우 ObjectId로 변환
+        loginId = new mongoose.Types.ObjectId(user._id);
+        console.log(`[REGISTER DEBUG] Converted user._id to ObjectId - original: ${user._id}, converted: ${loginId}`);
+      }
+    } catch (conversionError) {
+      console.error(`[REGISTER ERROR] Failed to convert user._id to ObjectId - userId: ${user._id}, userId type: ${typeof user._id}, error: ${conversionError.message}`);
+      throw new Error("USER_ID_CONVERSION_FAILED");
+    }
+    
+    try {
+      // [DEBUG] 기존 null 값 문서 삭제 (unique 인덱스 충돌 방지)
+      const deletedNullDocs = await Business.deleteMany({ 
+        $or: [
+          { loginId: null },
+          { loginId: { $exists: false } }
+        ]
+      });
+      if (deletedNullDocs.deletedCount > 0) {
+        console.warn(`[REGISTER WARN] Deleted ${deletedNullDocs.deletedCount} null loginId Business documents before creation`);
+      }
+      
+      // [DEBUG] Business 생성 시도 (명시적으로 변환된 loginId 사용)
+      console.log(`[REGISTER DEBUG] Creating Business with loginId: ${loginId}, loginId type: ${typeof loginId}, loginId constructor: ${loginId.constructor.name}`);
+      const business = await Business.create({
+        loginId: loginId,
+        businessName,
+        businessNumber
+      });
+      console.log(`[REGISTER SUCCESS] Business created - businessId: ${business._id}, loginId: ${business.loginId}, loginId type: ${typeof business.loginId}, businessNumber: ${businessNumber}`);
+    } catch (error) {
+      console.error(`[REGISTER ERROR] Business creation failed - userId: ${user._id}, email: ${email}, businessNumber: ${businessNumber}, error: ${error.message}, code: ${error.code}`);
+      
+      // [DEBUG] User는 이미 생성되었으므로 삭제해야 함 (데이터 일관성 유지)
+      try {
+        await User.findByIdAndDelete(user._id);
+        console.log(`[REGISTER CLEANUP] Deleted User due to Business creation failure - userId: ${user._id}`);
+      } catch (deleteError) {
+        console.error(`[REGISTER ERROR] Failed to delete User after Business creation failure - userId: ${user._id}, error: ${deleteError.message}`);
+      }
+      
+      // [DEBUG] 중복 키 에러 (E11000) 처리
+      if (error.code === 11000) {
+        console.warn(`[REGISTER RETRY] Duplicate key error detected, attempting cleanup and retry - error: ${error.message}`);
+        
+        // [DEBUG] 중복 키 에러 발생 시, 더 강력하게 정리 후 재시도
+        const retryDeleted = await Business.deleteMany({ 
+          $or: [
+            { loginId: null },
+            { loginId: { $exists: false } },
+            { loginId: user._id },
+            { businessNumber: businessNumber }
+          ]
+        });
+        console.log(`[REGISTER RETRY] Cleaned up ${retryDeleted.deletedCount} Business documents before retry`);
+        
+        // [DEBUG] 잠시 대기 후 재시도 (인덱스 갱신 시간 확보)
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        try {
+          // [DEBUG] 재시도 시에도 명시적으로 변환된 loginId 사용
+          console.log(`[REGISTER DEBUG] Retry creating Business with loginId: ${loginId}, loginId type: ${typeof loginId}`);
+          const retryBusiness = await Business.create({
+            loginId: loginId,
+            businessName,
+            businessNumber,
+            email:user.email
+          });
+          console.log(`[REGISTER SUCCESS] Business created on retry - businessId: ${retryBusiness._id}, loginId: ${retryBusiness.loginId}, loginId type: ${typeof retryBusiness.loginId}`);
+        } catch (retryError) {
+          console.error(`[REGISTER ERROR] Business creation retry failed - userId: ${user._id}, error: ${retryError.message}, code: ${retryError.code}`);
+          
+          // [DEBUG] 재시도 실패 시 User 삭제하고 에러 throw
+          try {
+            await User.findByIdAndDelete(user._id);
+            console.log(`[REGISTER CLEANUP] Deleted User after retry failure - userId: ${user._id}`);
+          } catch (deleteError) {
+            console.error(`[REGISTER ERROR] Failed to delete User after retry failure - userId: ${user._id}, error: ${deleteError.message}`);
+          }
+          
+          throw new Error("BUSINESS_CREATION_FAILED");
+        }
+      } else {
+        // [DEBUG] 중복 키 에러가 아닌 다른 에러는 그대로 throw
+        console.error(`[REGISTER ERROR] Non-duplicate key error - error: ${error.message}, code: ${error.code}, stack: ${error.stack}`);
+        throw error;
+      }
+    }
   }
 
   return {
     user: user.toSafeJSON(),
-    message: userRole === "BUSINESS" ? "사업자 회원가입 완료" : "회원가입 완료"
+    message: userRole === "business" ? "사업자 회원가입 완료" : "회원가입 완료"
   };
 };
 
@@ -156,7 +279,7 @@ const getMe = async (userId) => {
   };
 
   // 역할에 따라 추가 데이터 반환
-  if (user.role === "BUSINESS") {
+  if (user.role === "business") {
     const business = await Business.findOne({ loginId: user._id });
     responseData.business = business || null;
   }
@@ -174,32 +297,129 @@ const logout = async (userId) => {
 const applyBusiness = async (userId, businessData) => {
   const { businessName, businessNumber } = businessData;
 
+  // [DEBUG] userId 검증 및 ObjectId 변환
+  if (!userId) {
+    console.error(`[APPLY_BUSINESS ERROR] userId is null/undefined`);
+    throw new Error("USER_ID_MISSING");
+  }
+  
+  let loginId;
+  try {
+    // userId가 이미 ObjectId인지 확인
+    if (userId instanceof mongoose.Types.ObjectId) {
+      loginId = userId;
+      console.log(`[APPLY_BUSINESS DEBUG] userId is already ObjectId - userId: ${userId}`);
+    } else {
+      // 문자열이거나 다른 타입인 경우 ObjectId로 변환
+      loginId = new mongoose.Types.ObjectId(userId);
+      console.log(`[APPLY_BUSINESS DEBUG] Converted userId to ObjectId - original: ${userId}, converted: ${loginId}`);
+    }
+  } catch (conversionError) {
+    console.error(`[APPLY_BUSINESS ERROR] Failed to convert userId to ObjectId - userId: ${userId}, userId type: ${typeof userId}, error: ${conversionError.message}`);
+    throw new Error("USER_ID_CONVERSION_FAILED");
+  }
+
   // 현재 사용자 정보 조회
-  const user = await User.findById(userId);
+  const user = await User.findById(loginId);
   if (!user) {
+    console.error(`[APPLY_BUSINESS ERROR] User not found - userId: ${loginId}`);
     throw new Error("USER_NOT_FOUND");
   }
 
-  // 이미 BUSINESS role인지 확인
-  if (user.role === "BUSINESS") {
+  // [DEBUG] user._id 확인
+  if (!user._id) {
+    console.error(`[APPLY_BUSINESS ERROR] User._id is null/undefined - userId: ${loginId}`);
+    throw new Error("USER_ID_NOT_FOUND");
+  }
+  console.log(`[APPLY_BUSINESS DEBUG] User found - userId: ${user._id}, user._id type: ${typeof user._id}, user._id constructor: ${user._id.constructor.name}`);
+
+  // 이미 business role인지 확인
+  if (user.role === "business") {
+    console.warn(`[APPLY_BUSINESS WARN] User already has business role - userId: ${user._id}`);
     throw new Error("ALREADY_BUSINESS");
   }
 
   // 이미 Business 문서가 존재하는지 확인
-  const existingBusiness = await Business.findOne({ loginId: userId });
+  const existingBusiness = await Business.findOne({ loginId: user._id });
   if (existingBusiness) {
+    console.warn(`[APPLY_BUSINESS WARN] Business already exists - userId: ${user._id}, businessId: ${existingBusiness._id}`);
     throw new Error("ALREADY_APPLIED");
   }
 
   // Business 문서 생성
-  await Business.create({
-    loginId: userId,
-    businessName,
-    businessNumber
-  });
+  try {
+    // [DEBUG] 기존 null 값 문서 삭제 (unique 인덱스 충돌 방지)
+    const deletedNullDocs = await Business.deleteMany({ 
+      $or: [
+        { loginId: null },
+        { loginId: { $exists: false } }
+      ]
+    });
+    if (deletedNullDocs.deletedCount > 0) {
+      console.warn(`[APPLY_BUSINESS WARN] Deleted ${deletedNullDocs.deletedCount} null loginId Business documents before creation`);
+    }
+    
+    // [DEBUG] Business 생성 시도 (user._id를 명시적으로 ObjectId로 변환하여 사용)
+    let finalLoginId;
+    if (user._id instanceof mongoose.Types.ObjectId) {
+      finalLoginId = user._id;
+    } else {
+      finalLoginId = new mongoose.Types.ObjectId(user._id);
+    }
+    
+    console.log(`[APPLY_BUSINESS DEBUG] Creating Business with loginId: ${finalLoginId}, loginId type: ${typeof finalLoginId}, loginId constructor: ${finalLoginId.constructor.name}`);
+    await Business.create({
+      loginId: finalLoginId,
+      businessName,
+      businessNumber
+    });
+    console.log(`[APPLY_BUSINESS SUCCESS] Business created - userId: ${user._id}, businessNumber: ${businessNumber}`);
+  } catch (error) {
+    console.error(`[APPLY_BUSINESS ERROR] Business creation failed - userId: ${user._id}, businessNumber: ${businessNumber}, error: ${error.message}, code: ${error.code}`);
+    
+    if (error.code === 11000) {
+      // [DEBUG] 중복 키 에러 발생 시, 더 강력하게 정리 후 재시도
+      console.warn(`[APPLY_BUSINESS RETRY] Duplicate key error detected, attempting cleanup and retry - error: ${error.message}`);
+      
+      const retryDeleted = await Business.deleteMany({ 
+        $or: [
+          { loginId: null },
+          { loginId: { $exists: false } },
+          { loginId: user._id },
+          { businessNumber: businessNumber }
+        ]
+      });
+      console.log(`[APPLY_BUSINESS RETRY] Cleaned up ${retryDeleted.deletedCount} Business documents before retry`);
+      
+      // 잠시 대기 후 재시도
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      try {
+        let retryLoginId;
+        if (user._id instanceof mongoose.Types.ObjectId) {
+          retryLoginId = user._id;
+        } else {
+          retryLoginId = new mongoose.Types.ObjectId(user._id);
+        }
+        
+        console.log(`[APPLY_BUSINESS RETRY] Retry creating Business with loginId: ${retryLoginId}`);
+        await Business.create({
+          loginId: retryLoginId,
+          businessName,
+          businessNumber
+        });
+        console.log(`[APPLY_BUSINESS SUCCESS] Business created on retry - userId: ${user._id}, businessNumber: ${businessNumber}`);
+      } catch (retryError) {
+        console.error(`[APPLY_BUSINESS ERROR] Business creation retry failed - userId: ${user._id}, error: ${retryError.message}, code: ${retryError.code}`);
+        throw new Error("BUSINESS_CREATION_FAILED");
+      }
+    } else {
+      throw error;
+    }
+  }
 
-  // User role을 BUSINESS로 변경 (승인 대기 상태는 Business 모델에서 관리)
-  user.role = "BUSINESS";
+  // User role을 business로 변경 (승인 대기 상태는 Business 모델에서 관리)
+  user.role = "business";
   await user.save();
 
   return {

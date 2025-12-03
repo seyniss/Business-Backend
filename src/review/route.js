@@ -25,12 +25,12 @@ router.get("/lodging/:lodgingId", getReviewsByLodging);
 // 인증 필요 라우트
 router.use(authenticateToken);
 
-// POST /api/business/reviews → 리뷰 작성 (USER만)
-router.post("/", requireRole("USER"), createReview);
+// POST /api/business/reviews → 리뷰 작성 (user만)
+router.post("/", requireRole("user"), createReview);
 
-// ADMIN 전용 라우트 (requireBusiness 전에 위치)
-// GET /api/business/reviews/reports → 신고 내역 조회 (ADMIN만)
-router.get("/reports", requireRole("ADMIN"), getReports);
+// admin 전용 라우트 (requireBusiness 전에 위치)
+// GET /api/business/reviews/reports → 신고 내역 조회 (admin만)
+router.get("/reports", requireRole("admin"), getReports);
 
 // 사업자 전용 라우트
 router.use(requireBusiness);

@@ -63,8 +63,7 @@ const createLodging = async (lodgingData, userId) => {
     amenityDetail,
     minPrice,
     lat,
-    lng,
-    reviewCount
+    lng
   } = lodgingData;
 
   const business = await Business.findOne({ loginId: userId });
@@ -126,7 +125,7 @@ const createLodging = async (lodgingData, userId) => {
     minPrice: minPrice !== undefined ? minPrice : undefined,
     lat: coordinates.lat,
     lng: coordinates.lng,
-    reviewCount: reviewCount !== undefined ? reviewCount : 0
+    reviewCount: 0 // 기본값 0, 리뷰 생성 시 자동으로 증가
   });
 
   const createdLodging = await Lodging.findById(lodging._id)
@@ -165,8 +164,7 @@ const updateLodging = async (lodgingId, lodgingData, userId) => {
     amenityDetail,
     minPrice,
     lat,
-    lng,
-    reviewCount
+    lng
   } = lodgingData;
 
   const updates = {};
@@ -175,7 +173,7 @@ const updateLodging = async (lodgingId, lodgingData, userId) => {
   if (rating !== undefined) updates.rating = rating;
   if (description !== undefined) updates.description = description;
   if (minPrice !== undefined) updates.minPrice = minPrice;
-  if (reviewCount !== undefined) updates.reviewCount = reviewCount;
+  // reviewCount는 리뷰 생성/삭제 시 자동으로 관리되므로 수동 수정 불가
   if (images !== undefined) {
     if (Array.isArray(images)) {
       updates.images = images.filter(img => img && img.trim().length > 0);

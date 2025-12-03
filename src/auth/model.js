@@ -48,8 +48,8 @@ const userSchema = new mongoose.Schema(
     // 🔑 권한 및 상태
     role: {
       type: String,
-      enum: ["USER", "BUSINESS", "ADMIN"],
-      default: "USER",
+      enum: ["user", "business", "admin"],
+      default: "user",
       index: true
     },
     // status: {

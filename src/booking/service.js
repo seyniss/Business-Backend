@@ -127,12 +127,12 @@ const getBookings = async (filters, userId, userRole) => {
   const query = {};
 
   // 사용자인 경우: 자신의 예약만 조회
-  if (userRole === 'USER') {
+  if (userRole === 'user') {
     query.user_id = userId;
   } 
   // 사업자인 경우: 자신의 사업 예약만 조회
-  else if (userRole === 'BUSINESS') {
-    const business = await Business.findOne({ login_id: userId });
+  else if (userRole === 'business') {
+    const business = await Business.findOne({ loginId: userId });
     if (!business) {
       throw new Error("BUSINESS_NOT_FOUND");
     }
@@ -242,14 +242,14 @@ const getBookingById = async (bookingId, userId, userRole) => {
   }
 
   // 사용자인 경우: 자신의 예약인지 확인
-  if (userRole === 'USER') {
+  if (userRole === 'user') {
     if (String(booking.user_id) !== String(userId)) {
       throw new Error("UNAUTHORIZED");
     }
   } 
   // 사업자인 경우: 자신의 사업 예약인지 확인
-  else if (userRole === 'BUSINESS') {
-    const business = await Business.findOne({ login_id: userId });
+  else if (userRole === 'business') {
+    const business = await Business.findOne({ loginId: userId });
     if (!business) {
       throw new Error("BUSINESS_NOT_FOUND");
     }
