@@ -206,7 +206,7 @@ const getDashboardStats = async (userId) => {
   // 최근 예약 정보 포맷팅
   const formattedRecentBookings = recentBookings.map(booking => ({
     bookingId: booking._id,
-    roomName: booking.roomId?.name || 'Unknown',
+    roomName: booking.roomId?.roomName || booking.roomId?.name || 'Unknown',
     userName: booking.userId?.name || 'Unknown',
     userEmail: booking.userId?.email || '',
     checkinDate: booking.checkinDate,

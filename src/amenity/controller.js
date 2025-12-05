@@ -4,14 +4,35 @@ const { successResponse, errorResponse } = require("../common/response");
 // 편의시설 생성/수정
 const createOrUpdateAmenity = async (req, res) => {
   try {
-    const { amenity_name, amenity_detail, lodging_id } = req.body;
+    const { 
+      bbqGrill, 
+      netflix, 
+      swimmingPool, 
+      parking, 
+      wifi, 
+      kitchen, 
+      pc, 
+      tv, 
+      ac,
+      lodging_id 
+    } = req.body;
 
-    if (!amenity_name || !lodging_id) {
-      return res.status(400).json(errorResponse("필수 필드가 누락되었습니다.", 400));
+    if (!lodging_id) {
+      return res.status(400).json(errorResponse("lodging_id는 필수입니다.", 400));
     }
 
     const result = await amenityService.createOrUpdateAmenity(
-      { amenity_name, amenity_detail },
+      { 
+        bbqGrill, 
+        netflix, 
+        swimmingPool, 
+        parking, 
+        wifi, 
+        kitchen, 
+        pc, 
+        tv, 
+        ac 
+      },
       lodging_id,
       req.user.id
     );
@@ -47,11 +68,31 @@ const getAmenityByLodging = async (req, res) => {
 // 편의시설 수정
 const updateAmenity = async (req, res) => {
   try {
-    const { amenity_name, amenity_detail } = req.body;
+    const { 
+      bbqGrill, 
+      netflix, 
+      swimmingPool, 
+      parking, 
+      wifi, 
+      kitchen, 
+      pc, 
+      tv, 
+      ac 
+    } = req.body;
 
     const result = await amenityService.updateAmenity(
       req.params.id,
-      { amenity_name, amenity_detail },
+      { 
+        bbqGrill, 
+        netflix, 
+        swimmingPool, 
+        parking, 
+        wifi, 
+        kitchen, 
+        pc, 
+        tv, 
+        ac 
+      },
       req.user.id
     );
 

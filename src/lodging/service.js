@@ -47,10 +47,20 @@ const getLodgings = async (userId) => {
     ? reviews.reduce((sum, r) => sum + (r.rating || 0), 0) / reviews.length 
     : lodging.rating || 0;
   
-  // amenities 배열 생성
-  const amenities = lodging.amenityId ? 
-    (lodging.amenityId.amenityDetail ? lodging.amenityId.amenityDetail.split(',').map(a => a.trim()) : []) : 
-    [];
+  // amenities 배열 생성 (실제 데이터 구조에 맞게)
+  const amenities = [];
+  if (lodging.amenityId) {
+    const amenity = lodging.amenityId;
+    if (amenity.bbqGrill) amenities.push('bbqGrill');
+    if (amenity.netflix) amenities.push('netflix');
+    if (amenity.swimmingPool) amenities.push('swimmingPool');
+    if (amenity.parking) amenities.push('parking');
+    if (amenity.wifi) amenities.push('wifi');
+    if (amenity.kitchen) amenities.push('kitchen');
+    if (amenity.pc) amenities.push('pc');
+    if (amenity.tv) amenities.push('tv');
+    if (amenity.ac) amenities.push('ac');
+  }
   
   // todayBookings 계산
   const today = new Date();
@@ -122,8 +132,15 @@ const createLodging = async (lodgingData, userId) => {
     country,
     category,
     hashtag,
-    amenityName,
-    amenityDetail,
+    bbqGrill,
+    netflix,
+    swimmingPool,
+    parking,
+    wifi,
+    kitchen,
+    pc,
+    tv,
+    ac,
     minPrice,
     lat,
     lng,
@@ -154,10 +171,21 @@ const createLodging = async (lodgingData, userId) => {
 
   // 편의시설 생성 (선택사항)
   let amenity = null;
-  if (amenityName) {
+  // 편의시설 데이터가 하나라도 있으면 생성
+  if (bbqGrill !== undefined || netflix !== undefined || swimmingPool !== undefined || 
+      parking !== undefined || wifi !== undefined || kitchen !== undefined || 
+      pc !== undefined || tv !== undefined || ac !== undefined) {
     amenity = await Amenity.create({
-      amenityName,
-      amenityDetail: amenityDetail || ""
+      lodgingId: null, // 나중에 설정됨
+      bbqGrill: bbqGrill || false,
+      netflix: netflix || false,
+      swimmingPool: swimmingPool || false,
+      parking: parking || false,
+      wifi: wifi || false,
+      kitchen: kitchen || false,
+      pc: pc || false,
+      tv: tv || false,
+      ac: ac || false
     });
   }
 
@@ -216,6 +244,12 @@ const createLodging = async (lodgingData, userId) => {
     city: city || ""
   });
 
+  // lodgingId 설정 (amenity가 생성된 경우)
+  if (amenity) {
+    amenity.lodgingId = lodging._id;
+    await amenity.save();
+  }
+
   const createdLodging = await Lodging.findById(lodging._id)
     .populate('amenityId');
 
@@ -247,8 +281,15 @@ const updateLodging = async (lodgingId, lodgingData, userId) => {
     country,
     category,
     hashtag,
-    amenityName,
-    amenityDetail,
+    bbqGrill,
+    netflix,
+    swimmingPool,
+    parking,
+    wifi,
+    kitchen,
+    pc,
+    tv,
+    ac,
     minPrice,
     lat,
     lng,
@@ -291,15 +332,39 @@ const updateLodging = async (lodgingId, lodgingData, userId) => {
       updates.hashtag = hashtag.split(/[,\s]+/).filter(tag => tag.length > 0);
     }
   }
-  if (amenityName !== undefined) {
-    if (amenityName) {
-      const amenity = await Amenity.create({
-        amenityName,
-        amenityDetail: amenityDetail || ""
+  // 편의시설 업데이트
+  if (bbqGrill !== undefined || netflix !== undefined || swimmingPool !== undefined || 
+      parking !== undefined || wifi !== undefined || kitchen !== undefined || 
+      pc !== undefined || tv !== undefined || ac !== undefined) {
+    let amenity = await Amenity.findOne({ lodgingId: lodgingId });
+    
+    if (amenity) {
+      // 기존 편의시설 업데이트
+      if (bbqGrill !== undefined) amenity.bbqGrill = bbqGrill;
+      if (netflix !== undefined) amenity.netflix = netflix;
+      if (swimmingPool !== undefined) amenity.swimmingPool = swimmingPool;
+      if (parking !== undefined) amenity.parking = parking;
+      if (wifi !== undefined) amenity.wifi = wifi;
+      if (kitchen !== undefined) amenity.kitchen = kitchen;
+      if (pc !== undefined) amenity.pc = pc;
+      if (tv !== undefined) amenity.tv = tv;
+      if (ac !== undefined) amenity.ac = ac;
+      await amenity.save();
+    } else {
+      // 새 편의시설 생성
+      amenity = await Amenity.create({
+        lodgingId: lodgingId,
+        bbqGrill: bbqGrill || false,
+        netflix: netflix || false,
+        swimmingPool: swimmingPool || false,
+        parking: parking || false,
+        wifi: wifi || false,
+        kitchen: kitchen || false,
+        pc: pc || false,
+        tv: tv || false,
+        ac: ac || false
       });
       updates.amenityId = amenity._id;
-    } else {
-      updates.amenityId = null;
     }
   }
 

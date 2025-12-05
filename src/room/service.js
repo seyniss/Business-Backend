@@ -70,9 +70,12 @@ const getRooms = async (userId, filters = {}) => {
     else query.status = status;
   }
   
-  // search 필터 (name 검색)
+  // search 필터 (roomName 또는 name 검색)
   if (search) {
-    query.name = { $regex: search, $options: 'i' };
+    query.$or = [
+      { roomName: { $regex: search, $options: 'i' } },
+      { name: { $regex: search, $options: 'i' } }
+    ];
   }
 
   const skip = (parseInt(page) - 1) * parseInt(pageSize);
@@ -89,17 +92,25 @@ const getRooms = async (userId, filters = {}) => {
   // 응답 형식 변환
   const formattedRooms = rooms.map(room => {
     const processedRoom = processImageUrls(room);
+    // roomImage 처리
+    let imagesArray = [];
+    if (room.roomImage) {
+      imagesArray = [room.roomImage];
+    } else if (room.images && Array.isArray(room.images) && room.images.length > 0) {
+      imagesArray = room.images;
+    }
+    
     return {
       id: room._id.toString(),
-      name: room.name || room.roomName,
+      name: room.roomName || room.name,
       type: room.type || 'standard',
       price: room.price,
-      maxGuests: room.maxGuests || room.capacityMax,
+      maxGuests: room.capacityMax || room.maxGuests,
       amenities: room.amenities || [],
       description: room.description || "",
-      images: processedRoom.images || (room.roomImage ? [room.roomImage] : []),
+      images: processedRoom.images || imagesArray,
       available: room.status === 'active',
-      quantity: room.quantity || room.countRoom || 1,
+      quantity: room.countRoom || room.quantity || 1,
       status: room.status === 'active' ? 'available' : (room.status === 'inactive' ? 'unavailable' : room.status)
     };
   });
@@ -135,17 +146,25 @@ const getRoomById = async (roomId, userId) => {
 
   const processedRoom = processImageUrls(room.toObject());
   
+  // roomImage 처리
+  let imagesArray = [];
+  if (room.roomImage) {
+    imagesArray = [room.roomImage];
+  } else if (room.images && Array.isArray(room.images) && room.images.length > 0) {
+    imagesArray = room.images;
+  }
+  
   return {
     id: room._id.toString(),
-    name: room.name || room.roomName,
+    name: room.roomName || room.name,
     type: room.type || 'standard',
     price: room.price,
-    maxGuests: room.maxGuests || room.capacityMax,
+    maxGuests: room.capacityMax || room.maxGuests,
     amenities: room.amenities || [],
     description: room.description || "",
-    images: processedRoom.images || (room.roomImage ? [room.roomImage] : []),
+    images: processedRoom.images || imagesArray,
     available: room.status === 'active',
-    quantity: room.quantity || room.countRoom || 1,
+    quantity: room.countRoom || room.quantity || 1,
     status: room.status === 'active' ? 'available' : (room.status === 'inactive' ? 'unavailable' : room.status),
     roomSize: room.roomSize,
     checkInTime: room.checkInTime,
@@ -162,16 +181,20 @@ const createRoom = async (roomData, userId) => {
     lodgingId,
     price,
     quantity,
+    countRoom,
     checkInTime,
     checkOutTime,
     name,
+    roomName,
     type,
     roomSize,
     maxGuests,
+    capacityMax,
     capacityMin,
     ownerDiscount,
     platformDiscount,
     images,
+    roomImage,
     amenities,
     description,
     status
@@ -183,7 +206,7 @@ const createRoom = async (roomData, userId) => {
   }
 
   const lodging = await Lodging.findOne({
-    _id: lodging_id,
+    _id: lodgingId,
     businessId: user._id
   });
 
@@ -191,13 +214,19 @@ const createRoom = async (roomData, userId) => {
     throw new Error("LODGING_NOT_FOUND");
   }
 
-  // images 배열 처리
+  // images/roomImage 처리
   let imagesArray = [];
-  if (images) {
+  let finalRoomImage = "";
+  if (roomImage) {
+    finalRoomImage = roomImage;
+    imagesArray = [roomImage];
+  } else if (images) {
     if (Array.isArray(images)) {
       imagesArray = images.filter(img => img && img.trim().length > 0);
+      finalRoomImage = imagesArray[0] || "";
     } else if (typeof images === 'string') {
       imagesArray = [images];
+      finalRoomImage = images;
     }
   }
 
@@ -213,16 +242,20 @@ const createRoom = async (roomData, userId) => {
   const room = await Room.create({
     lodgingId: lodgingId,
     price,
-    quantity: quantity || 1,
+    countRoom: countRoom || quantity || 1,
+    quantity: countRoom || quantity || 1,
     checkInTime: checkInTime || "15:00",
     checkOutTime: checkOutTime || "11:00",
-    name: name,
+    roomName: roomName || name,
+    name: roomName || name,
     type: type || 'standard',
     roomSize: roomSize || "",
-    maxGuests: maxGuests,
+    capacityMax: capacityMax || maxGuests,
+    maxGuests: capacityMax || maxGuests,
     capacityMin: capacityMin || 1,
     ownerDiscount: ownerDiscount || 0,
     platformDiscount: platformDiscount || 0,
+    roomImage: finalRoomImage,
     images: imagesArray,
     amenities: amenities || [],
     description: description || "",
@@ -252,16 +285,20 @@ const updateRoom = async (roomId, roomData, userId) => {
   const {
     price,
     quantity,
+    countRoom,
     checkInTime,
     checkOutTime,
     name,
+    roomName,
     type,
     roomSize,
     maxGuests,
+    capacityMax,
     capacityMin,
     ownerDiscount,
     platformDiscount,
     images,
+    roomImage,
     amenities,
     description,
     status
@@ -269,21 +306,45 @@ const updateRoom = async (roomId, roomData, userId) => {
 
   const updates = {};
   if (price !== undefined) updates.price = price;
-  if (quantity !== undefined) updates.quantity = quantity;
+  if (countRoom !== undefined) {
+    updates.countRoom = countRoom;
+    updates.quantity = countRoom;
+  } else if (quantity !== undefined) {
+    updates.countRoom = quantity;
+    updates.quantity = quantity;
+  }
   if (checkInTime !== undefined) updates.checkInTime = checkInTime;
   if (checkOutTime !== undefined) updates.checkOutTime = checkOutTime;
-  if (name !== undefined) updates.name = name;
+  if (roomName !== undefined) {
+    updates.roomName = roomName;
+    updates.name = roomName;
+  } else if (name !== undefined) {
+    updates.roomName = name;
+    updates.name = name;
+  }
   if (type !== undefined) updates.type = type;
   if (roomSize !== undefined) updates.roomSize = roomSize;
-  if (maxGuests !== undefined) updates.maxGuests = maxGuests;
+  if (capacityMax !== undefined) {
+    updates.capacityMax = capacityMax;
+    updates.maxGuests = capacityMax;
+  } else if (maxGuests !== undefined) {
+    updates.capacityMax = maxGuests;
+    updates.maxGuests = maxGuests;
+  }
   if (capacityMin !== undefined) updates.capacityMin = capacityMin;
   if (ownerDiscount !== undefined) updates.ownerDiscount = ownerDiscount;
   if (platformDiscount !== undefined) updates.platformDiscount = platformDiscount;
-  if (images !== undefined) {
+  if (roomImage !== undefined) {
+    updates.roomImage = roomImage;
+    updates.images = [roomImage];
+  } else if (images !== undefined) {
     if (Array.isArray(images)) {
-      updates.images = images.filter(img => img && img.trim().length > 0);
+      const filteredImages = images.filter(img => img && img.trim().length > 0);
+      updates.images = filteredImages;
+      updates.roomImage = filteredImages[0] || "";
     } else if (typeof images === 'string') {
       updates.images = [images];
+      updates.roomImage = images;
     }
   }
   if (amenities !== undefined) {

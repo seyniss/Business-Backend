@@ -197,7 +197,7 @@ const getBookings = async (filters, userId) => {
         const formattedBooking = {
           id: booking._id.toString(),
           hotelName: lodging?.lodgingName || 'Unknown',
-          roomType: room?.name || room?.roomName || 'Unknown',
+          roomType: room?.roomName || room?.name || 'Unknown',
           guestName: user?.name || 'Unknown',
           guestEmail: user?.email || '',
           guestPhone: user?.phoneNumber || '',
@@ -269,7 +269,7 @@ const getBookingById = async (bookingId, userId) => {
   return {
     id: booking._id.toString(),
     hotelName: lodging?.lodgingName || 'Unknown',
-    roomType: room?.name || room?.roomName || 'Unknown',
+    roomType: room?.roomName || room?.name || 'Unknown',
     guestName: guestUser?.name || 'Unknown',
     guestEmail: guestUser?.email || '',
     guestPhone: guestUser?.phoneNumber || '',
@@ -331,7 +331,7 @@ const updateBookingStatus = async (bookingId, status, cancellationReason, userId
   return {
     id: updated._id.toString(),
     hotelName: lodging?.lodgingName || 'Unknown',
-    roomType: roomData?.name || roomData?.roomName || 'Unknown',
+    roomType: roomData?.roomName || roomData?.name || 'Unknown',
     guestName: userData?.name || 'Unknown',
     guestEmail: userData?.email || '',
     guestPhone: userData?.phoneNumber || '',
@@ -393,7 +393,7 @@ const updatePaymentStatus = async (bookingId, paymentStatus, userId) => {
   return {
     id: updated._id.toString(),
     hotelName: lodging?.lodgingName || 'Unknown',
-    roomType: roomData?.name || roomData?.roomName || 'Unknown',
+    roomType: roomData?.roomName || roomData?.name || 'Unknown',
     guestName: userData?.name || 'Unknown',
     guestEmail: userData?.email || '',
     guestPhone: userData?.phoneNumber || '',
