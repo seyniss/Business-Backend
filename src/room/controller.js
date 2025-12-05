@@ -2,20 +2,17 @@ const roomService = require("./service");
 const { successResponse, errorResponse } = require("../common/response");
 const mongoose = require("mongoose");
 
-// 객실 목록 조회 (쿼리 파라미터로 lodgingId 전달)
+// 객실 목록 조회
 const getRooms = async (req, res) => {
   try {
-    const { lodgingId } = req.query;
+    const { lodgingId, status, search, page = 1, pageSize = 10 } = req.query;
     
-    if (!lodgingId) {
-      return res.status(400).json(errorResponse("lodgingId 쿼리 파라미터가 필요합니다.", 400));
-    }
-    
-    if (!mongoose.Types.ObjectId.isValid(lodgingId)) {
+    // lodgingId는 선택사항 (제공되면 해당 숙소의 객실만, 없으면 사업자의 모든 객실)
+    if (lodgingId && !mongoose.Types.ObjectId.isValid(lodgingId)) {
       return res.status(400).json(errorResponse("잘못된 lodgingId 형식입니다.", 400));
     }
 
-    const result = await roomService.getRooms(lodgingId, req.user.id);
+    const result = await roomService.getRooms(req.user.id, { lodgingId, status, search, page, pageSize });
     return res.status(200).json(successResponse(result, "SUCCESS", 200));
   } catch (error) {
     if (error.message === "BUSINESS_NOT_FOUND") {
@@ -55,37 +52,53 @@ const getRoomById = async (req, res) => {
 const createRoom = async (req, res) => {
   try {
     const {
-      lodging_id,
+      lodgingId,
       price,
-      count_room,
-      check_in_time,
-      check_out_time,
-      room_name,
-      room_size,
-      capacity_max,
-      capacity_min,
-      owner_discount,
-      platform_discount,
-      room_image
+      quantity,
+      countRoom,
+      checkInTime,
+      checkOutTime,
+      name,
+      roomName,
+      type,
+      roomSize,
+      maxGuests,
+      capacityMax,
+      capacityMin,
+      ownerDiscount,
+      platformDiscount,
+      images,
+      roomImage,
+      amenities,
+      description,
+      status
     } = req.body;
 
-    if (!lodging_id || !price || !room_name || !capacity_max || !capacity_min) {
+    if (!lodgingId || !price || (!name && !roomName) || (!maxGuests && !capacityMax) || !capacityMin) {
       return res.status(400).json(errorResponse("필수 필드가 누락되었습니다.", 400));
     }
 
     const result = await roomService.createRoom({
-      lodging_id,
+      lodgingId,
       price,
-      count_room,
-      check_in_time,
-      check_out_time,
-      room_name,
-      room_size,
-      capacity_max,
-      capacity_min,
-      owner_discount,
-      platform_discount,
-      room_image
+      quantity,
+      countRoom,
+      checkInTime,
+      checkOutTime,
+      name,
+      roomName,
+      type,
+      roomSize,
+      maxGuests,
+      capacityMax,
+      capacityMin,
+      ownerDiscount,
+      platformDiscount,
+      images,
+      roomImage,
+      amenities,
+      description,
+      status
     }, req.user.id);
 
     return res.status(201).json(successResponse(result, "객실이 생성되었습니다.", 201));
@@ -109,30 +122,46 @@ const updateRoom = async (req, res) => {
 
     const {
       price,
-      count_room,
-      check_in_time,
-      check_out_time,
-      room_name,
-      room_size,
-      capacity_max,
-      capacity_min,
-      owner_discount,
-      platform_discount,
-      room_image
+      quantity,
+      countRoom,
+      checkInTime,
+      checkOutTime,
+      name,
+      roomName,
+      type,
+      roomSize,
+      maxGuests,
+      capacityMax,
+      capacityMin,
+      ownerDiscount,
+      platformDiscount,
+      images,
+      roomImage,
+      amenities,
+      description,
+      status
     } = req.body;
 
     const result = await roomService.updateRoom(req.params.id, {
       price,
-      count_room,
-      check_in_time,
-      check_out_time,
-      room_name,
-      room_size,
-      capacity_max,
-      capacity_min,
-      owner_discount,
-      platform_discount,
-      room_image
+      quantity,
+      countRoom,
+      checkInTime,
+      checkOutTime,
+      name,
+      roomName,
+      type,
+      roomSize,
+      maxGuests,
+      capacityMax,
+      capacityMin,
+      ownerDiscount,
+      platformDiscount,
+      images,
+      roomImage,
+      amenities,
+      description,
+      status
     }, req.user.id);
 
     return res.status(200).json(successResponse(result, "객실이 수정되었습니다.", 200));
@@ -185,11 +214,17 @@ const updateRoomStatus = async (req, res) => {
 
     const { status } = req.body;
 
-    if (!status || !['active', 'inactive', 'maintenance'].includes(status)) {
-      return res.status(400).json(errorResponse("유효하지 않은 상태입니다. (active, inactive, maintenance)", 400));
+    // 프론트엔드는 available, unavailable, maintenance를 보내지만, 모델은 active, inactive, maintenance를 사용
+    if (!status || !['available', 'unavailable', 'maintenance', 'active', 'inactive'].includes(status)) {
+      return res.status(400).json(errorResponse("유효하지 않은 상태입니다. (available, unavailable, maintenance)", 400));
     }
+    
+    // 상태 값 매핑
+    let mappedStatus = status;
+    if (status === 'available') mappedStatus = 'active';
+    else if (status === 'unavailable') mappedStatus = 'inactive';
 
-    const result = await roomService.updateRoomStatus(req.params.id, status, req.user.id);
+    const result = await roomService.updateRoomStatus(req.params.id, mappedStatus, req.user.id);
     return res.status(200).json(successResponse(result, "객실 상태가 변경되었습니다.", 200));
   } catch (error) {
     console.error("PATCH /api/business/rooms/:id/status 실패", error);

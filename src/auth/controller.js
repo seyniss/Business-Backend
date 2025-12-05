@@ -4,18 +4,16 @@ const { successResponse, errorResponse } = require("../common/response");
 // 회원가입
 const register = async (req, res) => {
   try {
-    const { email, password, name, phoneNumber, dateOfBirth, address, profileImage, role, businessName, businessNumber } = req.body;
+    const { email, password, name, phoneNumber, businessName, businessNumber } = req.body;
 
     // 필수 필드 검증
-    if (!email || !password || !name) {
-      return res.status(400).json(errorResponse("이메일/비밀번호/이름은 필수입니다.", 400));
+    if (!email || !password || !name || !phoneNumber) {
+      return res.status(400).json(errorResponse("이메일/비밀번호/이름/전화번호는 필수입니다.", 400));
     }
 
-    // 사업자로 가입하는 경우 사업자 정보 필수
-    if (role === "BUSINESS") {
-      if (!businessName || !businessNumber) {
-        return res.status(400).json(errorResponse("사업자로 가입하는 경우 사업자명과 사업자등록번호는 필수입니다.", 400));
-      }
+    // 사업자등록번호 필수
+    if (!businessNumber) {
+      return res.status(400).json(errorResponse("사업자등록번호는 필수입니다.", 400));
     }
 
     const result = await authService.register({
@@ -23,10 +21,6 @@ const register = async (req, res) => {
       password,
       name,
       phoneNumber,
-      dateOfBirth,
-      address,
-      profileImage,
-      role,
       businessName,
       businessNumber
     });
@@ -35,6 +29,12 @@ const register = async (req, res) => {
   } catch (error) {
     if (error.message === "EMAIL_ALREADY_EXISTS") {
       return res.status(400).json(errorResponse("이미 가입된 이메일", 400));
+    }
+    if (error.message === "PHONE_NUMBER_REQUIRED") {
+      return res.status(400).json(errorResponse("전화번호는 필수입니다.", 400));
+    }
+    if (error.message === "BUSINESS_NUMBER_REQUIRED") {
+      return res.status(400).json(errorResponse("사업자등록번호는 필수입니다.", 400));
     }
     if (error.message === "BUSINESS_NUMBER_ALREADY_EXISTS") {
       return res.status(400).json(errorResponse("이미 등록된 사업자등록번호입니다.", 400));
@@ -95,8 +95,8 @@ const getMe = async (req, res) => {
     const result = await authService.getMe(req.user.id);
     return res.status(200).json(successResponse(result, "SUCCESS", 200));
   } catch (error) {
-    if (error.message === "USER_NOT_FOUND") {
-      return res.status(404).json(errorResponse("사용자 정보 없음", 404));
+    if (error.message === "BUSINESS_USER_NOT_FOUND") {
+      return res.status(404).json(errorResponse("사업자 정보 없음", 404));
     }
     return res.status(401).json(errorResponse("조회 실패", 401, error.message));
   }
@@ -120,36 +120,6 @@ const logout = async (req, res) => {
   }
 };
 
-// 사업자 신청
-const applyBusiness = async (req, res) => {
-  try {
-    const { businessName, businessNumber } = req.body;
-
-    // 필수 필드 검증
-    if (!businessName || !businessNumber) {
-      return res.status(400).json(errorResponse("사업자명과 사업자등록번호는 필수입니다.", 400));
-    }
-
-    const result = await authService.applyBusiness(req.user.id, { businessName, businessNumber });
-
-    return res.status(201).json(successResponse(result, "사업자 신청이 완료되었습니다.", 201));
-  } catch (error) {
-    if (error.message === "USER_NOT_FOUND") {
-      return res.status(404).json(errorResponse("사용자 정보를 찾을 수 없습니다.", 404));
-    }
-    if (error.message === "ALREADY_BUSINESS") {
-      return res.status(400).json(errorResponse("이미 사업자로 등록되어 있습니다.", 400));
-    }
-    if (error.message === "ALREADY_APPLIED") {
-      return res.status(400).json(errorResponse("이미 사업자 신청이 완료되었습니다.", 400));
-    }
-    if (error.code === 11000 && error.keyPattern?.businessNumber) {
-      return res.status(400).json(errorResponse("이미 등록된 사업자등록번호입니다.", 400));
-    }
-    return res.status(500).json(errorResponse("사업자 신청 실패", 500, error.message));
-  }
-};
-
 // 비밀번호 변경
 const changePassword = async (req, res) => {
   try {
@@ -167,8 +137,8 @@ const changePassword = async (req, res) => {
 
     return res.status(200).json(successResponse(result, "비밀번호가 변경되었습니다.", 200));
   } catch (error) {
-    if (error.message === "USER_NOT_FOUND") {
-      return res.status(404).json(errorResponse("사용자 정보를 찾을 수 없습니다.", 404));
+    if (error.message === "BUSINESS_USER_NOT_FOUND") {
+      return res.status(404).json(errorResponse("사업자 정보를 찾을 수 없습니다.", 404));
     }
     if (error.message === "INVALID_CURRENT_PASSWORD") {
       return res.status(400).json(errorResponse("현재 비밀번호가 올바르지 않습니다.", 400));
@@ -197,20 +167,18 @@ const forgotPassword = async (req, res) => {
 // 프로필 수정
 const updateProfile = async (req, res) => {
   try {
-    const { name, phoneNumber, dateOfBirth, address, profileImage } = req.body;
+    const { name, phoneNumber, businessNumber } = req.body;
 
     const result = await authService.updateProfile(req.user.id, {
       name,
       phoneNumber,
-      dateOfBirth,
-      address,
-      profileImage
+      businessNumber
     });
 
     return res.status(200).json(successResponse(result, "프로필이 수정되었습니다.", 200));
   } catch (error) {
-    if (error.message === "USER_NOT_FOUND") {
-      return res.status(404).json(errorResponse("사용자 정보를 찾을 수 없습니다.", 404));
+    if (error.message === "BUSINESS_USER_NOT_FOUND") {
+      return res.status(404).json(errorResponse("사업자 정보를 찾을 수 없습니다.", 404));
     }
     return res.status(500).json(errorResponse("프로필 수정 실패", 500, error.message));
   }
@@ -219,7 +187,8 @@ const updateProfile = async (req, res) => {
 // 카카오 로그인
 const kakaoLogin = async (req, res) => {
   try {
-    const { accessToken } = req.body;
+    // 프론트엔드는 access_token을 보내지만, 서비스는 accessToken을 기대
+    const accessToken = req.body.access_token || req.body.accessToken;
 
     if (!accessToken) {
       return res.status(400).json(errorResponse("카카오 액세스 토큰이 필요합니다.", 400));
@@ -266,7 +235,6 @@ module.exports = {
   login,
   getMe,
   logout,
-  applyBusiness,
   changePassword,
   forgotPassword,
   updateProfile,

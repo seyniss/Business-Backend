@@ -9,7 +9,6 @@ const {
   login,
   getMe,
   logout,
-  applyBusiness,
   changePassword,
   forgotPassword,
   updateProfile,
@@ -47,9 +46,6 @@ router.put("/password", changePassword);
 
 // PUT /api/business/auth/profile → 프로필 수정 (로그인 필요)
 router.put("/profile", updateProfile);
-
-// POST /api/business/auth/apply-business → 사업자 신청 (로그인 필요)
-router.post("/apply-business", applyBusiness);
 
 module.exports = router;
 

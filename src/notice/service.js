@@ -1,28 +1,28 @@
 const Notice = require("./model");
 const Room = require("../room/model");
 const Lodging = require("../lodging/model");
-const Business = require("../auth/business");
+const BusinessUser = require("../auth/model");
 
 // 공지사항 생성/수정
 const createOrUpdateNotice = async (noticeData, userId) => {
   const { room_id, content, usage_guide, introduction } = noticeData;
 
-  const business = await Business.findOne({ login_id: userId });
-  if (!business) {
+  const user = await BusinessUser.findById(userId);
+  if (!user || user.role !== 'business') {
     throw new Error("BUSINESS_NOT_FOUND");
   }
 
-  const room = await Room.findById(room_id).populate('lodging_id');
+  const room = await Room.findById(room_id).populate('lodgingId');
   if (!room) {
     throw new Error("ROOM_NOT_FOUND");
   }
 
-  const lodging = await Lodging.findById(room.lodging_id);
-  if (!lodging || String(lodging.business_id) !== String(business._id)) {
+  const lodging = await Lodging.findById(room.lodgingId);
+  if (!lodging || String(lodging.businessId) !== String(user._id)) {
     throw new Error("UNAUTHORIZED");
   }
 
-  let notice = await Notice.findOne({ room_id });
+  let notice = await Notice.findOne({ roomId: room_id });
   
   if (notice) {
     if (content !== undefined) notice.content = content;
@@ -31,7 +31,7 @@ const createOrUpdateNotice = async (noticeData, userId) => {
     await notice.save();
   } else {
     notice = await Notice.create({
-      room_id,
+      roomId: room_id,
       content: content || "",
       usage_guide: usage_guide || "",
       introduction: introduction || ""
@@ -43,22 +43,22 @@ const createOrUpdateNotice = async (noticeData, userId) => {
 
 // 객실별 공지사항 조회
 const getNoticeByRoom = async (roomId, userId) => {
-  const room = await Room.findById(roomId).populate('lodging_id');
+  const room = await Room.findById(roomId).populate('lodgingId');
   if (!room) {
     throw new Error("ROOM_NOT_FOUND");
   }
 
-  const business = await Business.findOne({ login_id: userId });
-  if (!business) {
+  const user = await BusinessUser.findById(userId);
+  if (!user || user.role !== 'business') {
     throw new Error("BUSINESS_NOT_FOUND");
   }
 
-  const lodging = await Lodging.findById(room.lodging_id);
-  if (!lodging || String(lodging.business_id) !== String(business._id)) {
+  const lodging = await Lodging.findById(room.lodgingId);
+  if (!lodging || String(lodging.businessId) !== String(user._id)) {
     throw new Error("UNAUTHORIZED");
   }
 
-  const notice = await Notice.findOne({ room_id: roomId });
+  const notice = await Notice.findOne({ roomId: roomId });
   return notice || null;
 };
 
@@ -71,18 +71,18 @@ const updateNotice = async (noticeId, noticeData, userId) => {
     throw new Error("NOTICE_NOT_FOUND");
   }
 
-  const room = await Room.findById(notice.room_id).populate('lodging_id');
+  const room = await Room.findById(notice.roomId).populate('lodgingId');
   if (!room) {
     throw new Error("ROOM_NOT_FOUND");
   }
 
-  const business = await Business.findOne({ login_id: userId });
-  if (!business) {
+  const user = await BusinessUser.findById(userId);
+  if (!user || user.role !== 'business') {
     throw new Error("BUSINESS_NOT_FOUND");
   }
 
-  const lodging = await Lodging.findById(room.lodging_id);
-  if (!lodging || String(lodging.business_id) !== String(business._id)) {
+  const lodging = await Lodging.findById(room.lodgingId);
+  if (!lodging || String(lodging.businessId) !== String(user._id)) {
     throw new Error("UNAUTHORIZED");
   }
 

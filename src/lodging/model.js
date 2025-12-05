@@ -87,18 +87,61 @@ const lodgingSchema = new mongoose.Schema(
       trim: true,
     },
     
-    // 🔗 사업자 참조 (Business 모델과 연결)
+    // 🔗 사업자 참조 (BusinessUser 모델과 직접 연결)
     businessId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Business',
+      ref: 'BusinessUser',
       required: true,
       index: true
+    },
+    
+    // 🏢 사업자명 (조회 성능 향상을 위해 저장)
+    businessName: {
+      type: String,
+      required: true,
+      trim: true
     },
     
     amenityId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Amenity',
       required: false
+    },
+    
+    // 📞 연락처 정보
+    phoneNumber: {
+      type: String,
+      trim: true,
+      default: ""
+    },
+    email: {
+      type: String,
+      trim: true,
+      default: ""
+    },
+    website: {
+      type: String,
+      trim: true,
+      default: ""
+    },
+    
+    // ⏰ 체크인/아웃 시간 (기본값, Room에서 오버라이드 가능)
+    checkInTime: {
+      type: String,
+      trim: true,
+      default: "15:00"
+    },
+    checkOutTime: {
+      type: String,
+      trim: true,
+      default: "11:00"
+    },
+    
+    // 📍 도시 정보
+    city: {
+      type: String,
+      trim: true,
+      default: ""
     }
   },
   {

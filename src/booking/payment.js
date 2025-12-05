@@ -2,14 +2,14 @@ const mongoose = require("mongoose");
 
 const paymentSchema = new mongoose.Schema(
   {
-    booking_id: {
+    bookingId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Booking',
       required: true,
       unique: true,
       index: true
     },
-    payment_type_id: {
+    paymentTypeId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'PaymentType',
       required: true

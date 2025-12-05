@@ -40,7 +40,7 @@ app.get("/", (_req, res) => res.send("Hotel Booking Business API OK"));
 
 // API 라우트
 app.use("/api/business/auth", authRoutes);
-app.use("/api/lodgings", lodgingRoutes);
+app.use("/api/business/hotel", lodgingRoutes);
 app.use("/api/business/rooms", roomRoutes);
 app.use("/api/business/bookings", bookingRoutes);  
 app.use("/api/business/stats", statsRoutes);

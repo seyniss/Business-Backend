@@ -3,7 +3,7 @@ const bcrypt = require("bcrypt");
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const userSchema = new mongoose.Schema(
+const businessUserSchema = new mongoose.Schema(
   {
     // 🔐 기본 정보
     name: {
@@ -22,7 +22,7 @@ const userSchema = new mongoose.Schema(
     phoneNumber: {
       type: String,
       trim: true,
-      default: ""
+      required: true
     },
     passwordHash: {
       type: String,
@@ -30,34 +30,13 @@ const userSchema = new mongoose.Schema(
       select: false
     },
 
-    // 👤 개인정보
-    dateOfBirth: {
-      type: Date
-    },
-    profileImage: {
-      type: String,
-      trim: true,
-      default: ""
-    },
-    address: {
-      type: String,
-      trim: true,
-      default: ""
-    },
-
     // 🔑 권한 및 상태
     role: {
       type: String,
-      enum: ["USER", "BUSINESS", "ADMIN"],
-      default: "USER",
+      enum: ["business", "admin"],
+      default: "business",
       index: true
     },
-    // status: {
-    //   type: String,
-    //   enum: ["active", "banned", "pending"],
-    //   default: "active",
-    //   index: true
-    // },
     isActive: {
       type: Boolean,
       default: true
@@ -66,6 +45,18 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ['local', 'kakao', 'google'],
       default: 'local'
+    },
+
+    // 🏢 사업자 정보
+    businessName: {
+      type: String,
+      trim: true
+    },
+    businessNumber: {
+      type: String,
+      trim: true,
+      unique: true,
+      required: true
     },
 
     // 🔒 보안 관련
@@ -83,24 +74,39 @@ const userSchema = new mongoose.Schema(
 );
 
 // ----------------------
+// 검증 로직
+// ----------------------
+// businessNumber는 필수, businessName이 없으면 name을 사용
+businessUserSchema.pre('validate', function(next) {
+  if (!this.businessNumber) {
+    return next(new Error('사업자등록번호는 필수입니다.'));
+  }
+  // businessName이 없으면 name을 사용
+  if (!this.businessName) {
+    this.businessName = this.name;
+  }
+  next();
+});
+
+// ----------------------
 // 메서드들
 // ----------------------
-userSchema.methods.comparePassword = function (plain) {
+businessUserSchema.methods.comparePassword = function (plain) {
   return bcrypt.compare(plain, this.passwordHash);
 };
 
-userSchema.methods.setPassword = async function (plain) {
+businessUserSchema.methods.setPassword = async function (plain) {
   const salt = await bcrypt.genSalt(10);
   this.passwordHash = await bcrypt.hash(plain, salt);
 };
 
-userSchema.methods.toSafeJSON = function () {
+businessUserSchema.methods.toSafeJSON = function () {
   const obj = this.toObject({ versionKey: false });
   delete obj.passwordHash;
   return obj;
 };
 
-userSchema.set("toJSON", {
+businessUserSchema.set("toJSON", {
   versionKey: false,
   transform: (_doc, ret) => {
     delete ret.passwordHash;
@@ -108,5 +114,5 @@ userSchema.set("toJSON", {
   }
 });
 
-module.exports = mongoose.model("User", userSchema);
+module.exports = mongoose.model("BusinessUser", businessUserSchema);
 

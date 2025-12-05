@@ -2,8 +2,7 @@ const Booking = require("./model");
 const Payment = require("./payment");
 const Room = require("../room/model");
 const Lodging = require("../lodging/model");
-const User = require("../auth/model");
-const Business = require("../auth/business");
+const BusinessUser = require("../auth/model");
 const mongoose = require("mongoose");
 
 // 예약 가능 여부 체크 (트랜잭션 내에서 사용)
@@ -11,11 +10,11 @@ const checkRoomAvailability = async (roomId, checkinDate, checkoutDate, session)
   // 날짜가 겹치는 기존 예약 조회
   // 겹침 조건: 새 예약의 체크인이 기존 예약의 체크아웃 전이고, 새 예약의 체크아웃이 기존 예약의 체크인 후
   const overlappingBookings = await Booking.countDocuments({
-    room_id: roomId,
-    booking_status: { $in: ['pending', 'confirmed'] }, // pending과 confirmed만 카운트
+    roomId: roomId,
+    bookingStatus: { $in: ['pending', 'confirmed'] }, // pending과 confirmed만 카운트
     $and: [
-      { checkin_date: { $lt: checkoutDate } }, // 새 예약의 체크인이 기존 예약의 체크아웃 전
-      { checkout_date: { $gt: checkinDate } }  // 새 예약의 체크아웃이 기존 예약의 체크인 후
+      { checkinDate: { $lt: checkoutDate } }, // 새 예약의 체크인이 기존 예약의 체크아웃 전
+      { checkoutDate: { $gt: checkinDate } }  // 새 예약의 체크아웃이 기존 예약의 체크인 후
     ]
   }).session(session);
 
@@ -23,7 +22,7 @@ const checkRoomAvailability = async (roomId, checkinDate, checkoutDate, session)
 };
 
 // 예약 생성 (트랜잭션 사용)
-const createBooking = async (bookingData, userId, userRole) => {
+const createBooking = async (bookingData, userId) => {
   const { room_id, user_id, adult, child, checkin_date, checkout_date, duration } = bookingData;
   
   const session = await mongoose.startSession();
@@ -36,18 +35,18 @@ const createBooking = async (bookingData, userId, userRole) => {
       throw new Error("ROOM_NOT_FOUND");
     }
 
-    // Lodging 조회를 통해 business_id 가져오기
-    const lodging = await Lodging.findById(room.lodging_id).session(session);
+    // Lodging 조회를 통해 businessUserId 가져오기
+    const lodging = await Lodging.findById(room.lodgingId).session(session);
     if (!lodging) {
       throw new Error("LODGING_NOT_FOUND");
     }
 
-    const business_id = lodging.business_id;
+    const businessUserId = lodging.businessId;
 
     // 인원 수가 Room의 수용 인원 범위 내인지 확인
     const totalGuests = (Number(adult) || 0) + (Number(child) || 0);
     
-    if (totalGuests < room.capacity_min || totalGuests > room.capacity_max) {
+    if (totalGuests < room.capacityMin || totalGuests > (room.maxGuests || room.capacityMax)) {
       throw new Error("INVALID_GUEST_COUNT");
     }
 
@@ -60,28 +59,28 @@ const createBooking = async (bookingData, userId, userRole) => {
     );
 
     // 방 수량 확인
-    if (existingBookingsCount >= room.count_room) {
+    if (existingBookingsCount >= (room.quantity || room.countRoom)) {
       throw new Error("ROOM_NOT_AVAILABLE");
     }
 
-    // User 유효성 검증 (트랜잭션 외부에서 조회해도 됨 - 읽기 전용)
-    const user = await User.findById(user_id);
+    // BusinessUser 유효성 검증 (트랜잭션 외부에서 조회해도 됨 - 읽기 전용)
+    const user = await BusinessUser.findById(user_id);
     if (!user) {
       throw new Error("USER_NOT_FOUND");
     }
 
     // 예약 생성 (트랜잭션 내에서, 항상 pending 상태로 시작)
     const booking = await Booking.create([{
-      room_id,
-      user_id,
-      business_id: business_id,
+      roomId: room_id,
+      userId: user_id,
+      businessUserId: businessUserId,
       adult: adult || 0,
       child: child || 0,
-      checkin_date: new Date(checkin_date),
-      checkout_date: new Date(checkout_date),
+      checkinDate: new Date(checkin_date),
+      checkoutDate: new Date(checkout_date),
       duration,
-      booking_status: 'pending',
-      booking_date: new Date()
+      bookingStatus: 'pending',
+      bookingDate: new Date()
     }], { session });
 
     // 트랜잭션 커밋
@@ -91,16 +90,16 @@ const createBooking = async (bookingData, userId, userRole) => {
     const bookingObj = booking[0].toObject();
     
     const [roomData, userData, payment] = await Promise.all([
-      Room.findById(bookingObj.room_id).lean().catch(() => null),
-      User.findById(bookingObj.user_id).lean().catch(() => null),
-      Payment.findOne({ booking_id: bookingObj._id })
-        .populate('payment_type_id')
+      Room.findById(bookingObj.roomId).lean().catch(() => null),
+      BusinessUser.findById(bookingObj.userId).lean().catch(() => null),
+      Payment.findOne({ bookingId: bookingObj._id })
+        .populate('paymentTypeId')
         .lean()
         .catch(() => null)
     ]);
 
-    const lodgingData = roomData && roomData.lodging_id
-      ? await Lodging.findById(roomData.lodging_id).lean().catch(() => null)
+    const lodgingData = roomData && roomData.lodgingId
+      ? await Lodging.findById(roomData.lodgingId).lean().catch(() => null)
       : null;
 
     return {
@@ -121,47 +120,39 @@ const createBooking = async (bookingData, userId, userRole) => {
 };
 
 // 예약 목록 조회
-const getBookings = async (filters, userId, userRole) => {
-  const { status, lodgingId, startDate, endDate, page = 1, limit = 20 } = filters;
+const getBookings = async (filters, userId) => {
+  const { status, lodgingId, startDate, endDate, search, page = 1, limit = 20 } = filters;
 
   const query = {};
 
-  // 사용자인 경우: 자신의 예약만 조회
-  if (userRole === 'USER') {
-    query.user_id = userId;
-  } 
-  // 사업자인 경우: 자신의 사업 예약만 조회
-  else if (userRole === 'BUSINESS') {
-    const business = await Business.findOne({ login_id: userId });
-    if (!business) {
-      throw new Error("BUSINESS_NOT_FOUND");
-    }
-    query.business_id = business._id;
-  } else {
-    throw new Error("UNAUTHORIZED");
+  // 사업자의 사업 예약만 조회
+  const user = await BusinessUser.findById(userId);
+  if (!user || user.role !== 'business') {
+    throw new Error("BUSINESS_NOT_FOUND");
   }
+  query.businessUserId = user._id;
 
   if (status) {
-    query.booking_status = status;
+    query.bookingStatus = status;
   }
 
   if (lodgingId) {
-    const rooms = await Room.find({ lodging_id: lodgingId }).select('_id');
+    const rooms = await Room.find({ lodgingId: lodgingId }).select('_id');
     const roomIds = rooms.map(r => r._id);
     if (roomIds.length > 0) {
-      query.room_id = { $in: roomIds };
+      query.roomId = { $in: roomIds };
     } else {
-      query.room_id = { $in: [] };
+      query.roomId = { $in: [] };
     }
   }
 
   if (startDate || endDate) {
-    query.checkin_date = {};
+    query.checkinDate = {};
     if (startDate) {
-      query.checkin_date.$gte = new Date(startDate);
+      query.checkinDate.$gte = new Date(startDate);
     }
     if (endDate) {
-      query.checkin_date.$lte = new Date(endDate);
+      query.checkinDate.$lte = new Date(endDate);
     }
   }
 
@@ -179,7 +170,7 @@ const getBookings = async (filters, userId, userRole) => {
   const bookingsWithPayment = await Promise.all(
     bookings.map(async (booking) => {
       try {
-        if (!booking.room_id || !booking.user_id || !booking._id) {
+        if (!booking.roomId || !booking.userId || !booking._id) {
           return {
             booking: booking,
             room: null,
@@ -190,130 +181,135 @@ const getBookings = async (filters, userId, userRole) => {
         }
 
         const [room, user, payment] = await Promise.all([
-          Room.findById(booking.room_id).lean().catch(() => null),
-          User.findById(booking.user_id).lean().catch(() => null),
-          Payment.findOne({ booking_id: booking._id })
-            .populate('payment_type_id')
+          Room.findById(booking.roomId).lean().catch(() => null),
+          BusinessUser.findById(booking.userId).lean().catch(() => null),
+          Payment.findOne({ bookingId: booking._id })
+            .populate('paymentTypeId')
             .lean()
             .catch(() => null)
         ]);
         
-        const lodging = room && room.lodging_id 
-          ? await Lodging.findById(room.lodging_id).lean().catch(() => null)
+        const lodging = room && room.lodgingId 
+          ? await Lodging.findById(room.lodgingId).lean().catch(() => null)
           : null;
         
-        return {
-          booking: booking,
-          room: room || null,
-          lodging: lodging || null,
-          user: user || null,
-          payment: payment || null
+        // 프론트엔드 요구사항에 맞게 응답 형식 변환
+        const formattedBooking = {
+          id: booking._id.toString(),
+          hotelName: lodging?.lodgingName || 'Unknown',
+          roomType: room?.roomName || room?.name || 'Unknown',
+          guestName: user?.name || 'Unknown',
+          guestEmail: user?.email || '',
+          guestPhone: user?.phoneNumber || '',
+          checkIn: booking.checkinDate ? new Date(booking.checkinDate).toISOString().split('T')[0] : '',
+          checkOut: booking.checkoutDate ? new Date(booking.checkoutDate).toISOString().split('T')[0] : '',
+          guests: (booking.adult || 0) + (booking.child || 0),
+          amount: payment?.paid || 0,
+          status: booking.bookingStatus || 'pending',
+          createdAt: booking.createdAt ? new Date(booking.createdAt).toISOString().split('T')[0] : ''
         };
+        
+        return formattedBooking;
       } catch (err) {
         console.error("예약 데이터 처리 중 오류:", booking._id, err);
-        return {
-          booking: booking,
-          room: null,
-          lodging: null,
-          user: null,
-          payment: null
-        };
+        return null; // 유효하지 않은 예약은 제외
       }
     })
   );
   
-  const validBookings = bookingsWithPayment.filter(item => item && item.booking);
+  let validBookings = bookingsWithPayment.filter(item => item !== null);
+
+  // search 필터 적용 (guestName, hotelName, roomType에서 검색)
+  if (search) {
+    const searchLower = search.toLowerCase();
+    validBookings = validBookings.filter(booking => {
+      return (
+        booking.guestName?.toLowerCase().includes(searchLower) ||
+        booking.hotelName?.toLowerCase().includes(searchLower) ||
+        booking.roomType?.toLowerCase().includes(searchLower)
+      );
+    });
+  }
 
   return {
     bookings: validBookings,
-    total: total,
-    page: parseInt(page),
-    limit: parseInt(limit),
-    totalPages: Math.ceil(total / parseInt(limit))
+    totalPages: Math.ceil(total / parseInt(limit)),
+    currentPage: parseInt(page)
   };
 };
 
 // 예약 상세 조회
-const getBookingById = async (bookingId, userId, userRole) => {
+const getBookingById = async (bookingId, userId) => {
   const booking = await Booking.findById(bookingId);
 
   if (!booking) {
     throw new Error("BOOKING_NOT_FOUND");
   }
 
-  // 사용자인 경우: 자신의 예약인지 확인
-  if (userRole === 'USER') {
-    if (String(booking.user_id) !== String(userId)) {
-      throw new Error("UNAUTHORIZED");
-    }
-  } 
-  // 사업자인 경우: 자신의 사업 예약인지 확인
-  else if (userRole === 'BUSINESS') {
-    const business = await Business.findOne({ login_id: userId });
-    if (!business) {
-      throw new Error("BUSINESS_NOT_FOUND");
-    }
-    if (String(booking.business_id) !== String(business._id)) {
-      throw new Error("UNAUTHORIZED");
-    }
-  } else {
+  // 사업자의 사업 예약인지 확인
+  const user = await BusinessUser.findById(userId);
+  if (!user || user.role !== 'business') {
+    throw new Error("BUSINESS_NOT_FOUND");
+  }
+  if (String(booking.businessUserId) !== String(user._id)) {
     throw new Error("UNAUTHORIZED");
   }
 
-  const [room, user, payment] = await Promise.all([
-    Room.findById(booking.room_id).lean(),
-    User.findById(booking.user_id).lean(),
-    Payment.findOne({ booking_id: booking._id })
-      .populate('payment_type_id')
+  const [room, guestUser, payment] = await Promise.all([
+    Room.findById(booking.roomId).lean(),
+    BusinessUser.findById(booking.userId).lean(),
+    Payment.findOne({ bookingId: booking._id })
+      .populate('paymentTypeId')
       .lean()
   ]);
 
-  const lodging = room ? await Lodging.findById(room.lodging_id).lean() : null;
+  const lodging = room ? await Lodging.findById(room.lodgingId).lean() : null;
 
+  // 프론트엔드 요구사항에 맞게 응답 형식 변환
   return {
-    booking: booking.toObject(),
-    room: room || null,
-    lodging: lodging || null,
-    user: user || null,
-    payment: payment || null
+    id: booking._id.toString(),
+    hotelName: lodging?.lodgingName || 'Unknown',
+    roomType: room?.roomName || room?.name || 'Unknown',
+    guestName: guestUser?.name || 'Unknown',
+    guestEmail: guestUser?.email || '',
+    guestPhone: guestUser?.phoneNumber || '',
+    checkIn: booking.checkinDate ? new Date(booking.checkinDate).toISOString().split('T')[0] : '',
+    checkOut: booking.checkoutDate ? new Date(booking.checkoutDate).toISOString().split('T')[0] : '',
+    guests: (booking.adult || 0) + (booking.child || 0),
+    amount: payment?.paid || 0,
+    status: booking.bookingStatus || 'pending',
+    createdAt: booking.createdAt ? new Date(booking.createdAt).toISOString().split('T')[0] : ''
   };
 };
 
 // 예약 상태 변경
 const updateBookingStatus = async (bookingId, status, cancellationReason, userId) => {
-  const business = await Business.findOne({ login_id: userId });
-  if (!business) {
+  const user = await BusinessUser.findById(userId);
+  if (!user || user.role !== 'business') {
     throw new Error("BUSINESS_NOT_FOUND");
   }
 
   const booking = await Booking.findOne({
     _id: bookingId,
-    business_id: business._id
+    businessUserId: user._id
   });
 
   if (!booking) {
     throw new Error("BOOKING_NOT_FOUND");
   }
 
-  const updates = { booking_status: status };
+  const updates = { bookingStatus: status };
   
   // 취소 상태일 때만 취소 사유 저장
   if (status === 'cancelled' && cancellationReason) {
-    updates.cancellation_reason = cancellationReason;
+    updates.cancellationReason = cancellationReason;
   } else if (status !== 'cancelled') {
     // 취소 상태가 아니면 취소 사유 초기화
-    updates.cancellation_reason = null;
+    updates.cancellationReason = null;
   }
   
-  if (status === 'cancelled') {
-    const payment = await Payment.findOne({ booking_id: bookingId });
-    if (payment) {
-      payment.paid = 0;
-      await payment.save();
-    }
-    // 취소 시 결제 상태도 'refunded'로 변경
-    updates.payment_status = 'refunded';
-  }
+  // Payment 자동 생성/업데이트 로직 제거
+  // 결제는 별도 결제 API에서 처리하므로 여기서는 bookingStatus만 변경
 
   const updated = await Booking.findByIdAndUpdate(
     bookingId,
@@ -321,45 +317,53 @@ const updateBookingStatus = async (bookingId, status, cancellationReason, userId
     { new: true, runValidators: true }
   );
 
-  const [room, user, payment] = await Promise.all([
-    Room.findById(updated.room_id).lean(),
-    User.findById(updated.user_id).lean(),
-    Payment.findOne({ booking_id: updated._id })
-      .populate('payment_type_id')
+  const [roomData, userData, paymentData] = await Promise.all([
+    Room.findById(updated.roomId).lean(),
+    BusinessUser.findById(updated.userId).lean(),
+    Payment.findOne({ bookingId: updated._id })
+      .populate('paymentTypeId')
       .lean()
   ]);
 
-  const lodging = room ? await Lodging.findById(room.lodging_id).lean() : null;
+  const lodging = roomData ? await Lodging.findById(roomData.lodgingId).lean() : null;
 
+  // 프론트엔드 요구사항에 맞게 응답 형식 변환
   return {
-    booking: updated.toObject(),
-    room: room || null,
-    lodging: lodging || null,
-    user: user || null,
-    payment: payment || null
+    id: updated._id.toString(),
+    hotelName: lodging?.lodgingName || 'Unknown',
+    roomType: roomData?.roomName || roomData?.name || 'Unknown',
+    guestName: userData?.name || 'Unknown',
+    guestEmail: userData?.email || '',
+    guestPhone: userData?.phoneNumber || '',
+    checkIn: updated.checkinDate ? new Date(updated.checkinDate).toISOString().split('T')[0] : '',
+    checkOut: updated.checkoutDate ? new Date(updated.checkoutDate).toISOString().split('T')[0] : '',
+    guests: (updated.adult || 0) + (updated.child || 0),
+    amount: paymentData?.paid || 0,
+    status: updated.bookingStatus || 'pending',
+    createdAt: updated.createdAt ? new Date(updated.createdAt).toISOString().split('T')[0] : ''
   };
 };
 
 // 결제 상태 변경
 const updatePaymentStatus = async (bookingId, paymentStatus, userId) => {
-  const business = await Business.findOne({ login_id: userId });
-  if (!business) {
+  const user = await BusinessUser.findById(userId);
+  if (!user || user.role !== 'business') {
     throw new Error("BUSINESS_NOT_FOUND");
   }
 
   const booking = await Booking.findOne({
     _id: bookingId,
-    business_id: business._id
+    businessUserId: user._id
   });
 
   if (!booking) {
     throw new Error("BOOKING_NOT_FOUND");
   }
 
-  // Booking 모델의 payment_status 업데이트
-  const updates = { payment_status: paymentStatus };
+  // Booking 모델의 paymentStatus 업데이트
+  const updates = { paymentStatus: paymentStatus };
   
-  const paymentDoc = await Payment.findOne({ booking_id: bookingId });
+  const paymentDoc = await Payment.findOne({ bookingId: bookingId });
   if (paymentDoc) {
     if (paymentStatus === 'paid') {
       paymentDoc.paid = paymentDoc.total;
@@ -375,22 +379,30 @@ const updatePaymentStatus = async (bookingId, paymentStatus, userId) => {
     { new: true, runValidators: true }
   );
 
-  const [room, user, payment] = await Promise.all([
-    Room.findById(updated.room_id).lean(),
-    User.findById(updated.user_id).lean(),
-    Payment.findOne({ booking_id: bookingId })
-      .populate('payment_type_id')
+  const [roomData, userData, paymentData] = await Promise.all([
+    Room.findById(updated.roomId).lean(),
+    BusinessUser.findById(updated.userId).lean(),
+    Payment.findOne({ bookingId: bookingId })
+      .populate('paymentTypeId')
       .lean()
   ]);
 
-  const lodging = room ? await Lodging.findById(room.lodging_id).lean() : null;
+  const lodging = roomData ? await Lodging.findById(roomData.lodgingId).lean() : null;
 
+  // 프론트엔드 요구사항에 맞게 응답 형식 변환
   return {
-    booking: updated.toObject(),
-    room: room || null,
-    lodging: lodging || null,
-    user: user || null,
-    payment: payment || null
+    id: updated._id.toString(),
+    hotelName: lodging?.lodgingName || 'Unknown',
+    roomType: roomData?.roomName || roomData?.name || 'Unknown',
+    guestName: userData?.name || 'Unknown',
+    guestEmail: userData?.email || '',
+    guestPhone: userData?.phoneNumber || '',
+    checkIn: updated.checkinDate ? new Date(updated.checkinDate).toISOString().split('T')[0] : '',
+    checkOut: updated.checkoutDate ? new Date(updated.checkoutDate).toISOString().split('T')[0] : '',
+    guests: (updated.adult || 0) + (updated.child || 0),
+    amount: paymentData?.paid || 0,
+    status: updated.bookingStatus || 'pending',
+    createdAt: updated.createdAt ? new Date(updated.createdAt).toISOString().split('T')[0] : ''
   };
 };
 

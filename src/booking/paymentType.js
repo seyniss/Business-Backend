@@ -10,7 +10,7 @@ const paymentTypeSchema = new mongoose.Schema(
       maxlength: 20
       // 예: "신용카드", "체크카드", "하이브리드카드" 등
     },
-    type_code: {
+    typeCode: {
       type: Number,
       required: true,
       unique: true

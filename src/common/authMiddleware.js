@@ -2,7 +2,7 @@
 // 인증 필요한 API에서만 적용 (예: 예약 생성, 예약 조회 등)
 
 const jwt = require("jsonwebtoken");
-const User = require("../auth/model");
+const BusinessUser = require("../auth/model");
 const { errorResponse } = require("./response");
 
 const authenticateToken = async (req, res, next) => {
@@ -22,11 +22,11 @@ const authenticateToken = async (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    // 3️⃣ DB에서 사용자 조회
-    const user = await User.findById(decoded.id).select('isActive role');
+    // 3️⃣ DB에서 사업자 조회
+    const user = await BusinessUser.findById(decoded.id).select('isActive role');
     
     if (!user) {
-      return res.status(401).json(errorResponse("USER_NOT_FOUND", 401));
+      return res.status(401).json(errorResponse("BUSINESS_USER_NOT_FOUND", 401));
     }
     
     // 계정 활성 상태 확인
@@ -56,12 +56,12 @@ const requireRole = (role) => (req, res, next) => {
 };
 
 const requireBusiness = (req, res, next) => {
-  if (req.user?.role === 'BUSINESS') return next();
+  if (req.user?.role === 'business') return next();
   return res.status(403).json(errorResponse('사업자 권한이 필요합니다.', 403));
 };
 
 const requireAdmin = (req, res, next) => {
-  if (req.user?.role === 'ADMIN') return next();
+  if (req.user?.role === 'admin') return next();
   return res.status(403).json(errorResponse('관리자 권한이 필요합니다.', 403));
 };
 

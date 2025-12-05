@@ -10,6 +10,7 @@ const {
   createLodging,
   updateLodging,
   deleteLodging,
+  updateLodgingImages,
 } = require("./controller");
 const { authenticateToken, requireBusiness } = require("../common/authMiddleware");
 
@@ -26,10 +27,13 @@ router.get("/:id", getLodgingById);
 // POST /api/lodgings → 숙소 생성
 router.post("/", createLodging);
 
-// PUT /api/lodgings/:id → 숙소 수정
+// PUT /api/business/hotel/images → 호텔 이미지 수정
+router.put("/images", updateLodgingImages);
+
+// PUT /api/business/hotel/:id → 숙소 수정
 router.put("/:id", updateLodging);
 
-// DELETE /api/lodgings/:id → 숙소 삭제
+// DELETE /api/business/hotel/:id → 숙소 삭제
 router.delete("/:id", deleteLodging);
 
 module.exports = router;

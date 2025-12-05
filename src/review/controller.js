@@ -2,53 +2,6 @@ const reviewService = require("./service");
 const { successResponse, errorResponse } = require("../common/response");
 const mongoose = require("mongoose");
 
-// 리뷰 작성
-const createReview = async (req, res) => {
-  try {
-    const { lodging_id, booking_id, rating, content, images } = req.body;
-
-    // 필수 필드 검증
-    if (!lodging_id || !booking_id || !rating || !content) {
-      return res.status(400).json(errorResponse("필수 필드가 누락되었습니다.", 400));
-    }
-
-    // 평점 범위 검증
-    if (rating < 1 || rating > 5) {
-      return res.status(400).json(errorResponse("평점은 1부터 5까지입니다.", 400));
-    }
-
-    const result = await reviewService.createReview({
-      lodging_id,
-      booking_id,
-      rating,
-      content,
-      images
-    }, req.user.id);
-
-    return res.status(201).json(successResponse({ review: result }, "리뷰가 작성되었습니다.", 201));
-  } catch (error) {
-    if (error.message === "BOOKING_NOT_FOUND") {
-      return res.status(404).json(errorResponse("예약을 찾을 수 없습니다.", 404));
-    }
-    if (error.message === "UNAUTHORIZED") {
-      return res.status(403).json(errorResponse("리뷰를 작성할 권한이 없습니다.", 403));
-    }
-    if (error.message === "INVALID_BOOKING_STATUS") {
-      return res.status(403).json(errorResponse("예약 상태가 올바르지 않습니다.", 403));
-    }
-    if (error.message === "ROOM_NOT_FOUND") {
-      return res.status(404).json(errorResponse("객실 정보를 찾을 수 없습니다.", 404));
-    }
-    if (error.message === "LODGING_MISMATCH") {
-      return res.status(400).json(errorResponse("예약한 호텔과 리뷰 작성 대상 호텔이 일치하지 않습니다.", 400));
-    }
-    if (error.message === "REVIEW_ALREADY_EXISTS") {
-      return res.status(400).json(errorResponse("이미 해당 예약에 대한 리뷰를 작성하셨습니다.", 400));
-    }
-    return res.status(500).json(errorResponse("서버 오류", 500, error.message));
-  }
-};
-
 // 리뷰 신고
 const reportReview = async (req, res) => {
   try {
@@ -137,18 +90,21 @@ const getReviewsByLodging = async (req, res) => {
   }
 };
 
-// 신고 내역 조회
+// 신고 내역 조회 (사업자 본인이 신고한 내역만)
 const getReports = async (req, res) => {
   try {
     const filters = {
       status: req.query.status,
-      page: req.query.page,
-      limit: req.query.limit
+      page: req.query.page || 1,
+      limit: req.query.pageSize || req.query.limit || 10
     };
 
-    const result = await reviewService.getReports(filters);
+    const result = await reviewService.getReports(filters, req.user.id);
     return res.status(200).json(successResponse(result, "SUCCESS", 200));
   } catch (error) {
+    if (error.message === "BUSINESS_NOT_FOUND") {
+      return res.status(404).json(errorResponse("사업자 정보를 찾을 수 없습니다.", 404));
+    }
     return res.status(500).json(errorResponse("서버 오류", 500, error.message));
   }
 };
@@ -156,11 +112,20 @@ const getReports = async (req, res) => {
 // 사업자의 모든 숙소 리뷰 목록 조회
 const getReviews = async (req, res) => {
   try {
+    // status 값 매핑: approved → active, pending → active, reported → blocked
+    let mappedStatus = req.query.status;
+    if (req.query.status === 'approved' || req.query.status === 'pending') {
+      mappedStatus = 'active';
+    } else if (req.query.status === 'reported') {
+      mappedStatus = 'blocked';
+    }
+
     const filters = {
-      page: req.query.page,
-      limit: req.query.limit,
-      status: req.query.status,
-      rating: req.query.rating
+      page: req.query.page || 1,
+      limit: req.query.pageSize || req.query.limit || 10,
+      status: mappedStatus,
+      rating: req.query.rating,
+      search: req.query.search
     };
 
     const result = await reviewService.getReviews(req.user.id, filters);
@@ -241,7 +206,6 @@ const getReviewStats = async (req, res) => {
 };
 
 module.exports = {
-  createReview,
   reportReview,
   blockReview,
   getBlockedReviews,

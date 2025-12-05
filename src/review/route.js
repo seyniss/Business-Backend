@@ -5,7 +5,6 @@ const express = require("express");
 const router = express.Router();
 
 const {
-  createReview,
   reportReview,
   blockReview,
   getBlockedReviews,
@@ -16,7 +15,7 @@ const {
   replyToReview,
   getReviewStats,
 } = require("./controller");
-const { authenticateToken, requireRole, requireBusiness } = require("../common/authMiddleware");
+const { authenticateToken, requireBusiness } = require("../common/authMiddleware");
 
 // 공개 라우트 (인증 불필요)
 // GET /api/business/reviews/lodging/:lodgingId → 숙소별 리뷰 목록 조회 (공개)
@@ -25,15 +24,11 @@ router.get("/lodging/:lodgingId", getReviewsByLodging);
 // 인증 필요 라우트
 router.use(authenticateToken);
 
-// POST /api/business/reviews → 리뷰 작성 (USER만)
-router.post("/", requireRole("USER"), createReview);
-
-// ADMIN 전용 라우트 (requireBusiness 전에 위치)
-// GET /api/business/reviews/reports → 신고 내역 조회 (ADMIN만)
-router.get("/reports", requireRole("ADMIN"), getReports);
-
 // 사업자 전용 라우트
 router.use(requireBusiness);
+
+// GET /api/business/reviews/reports → 신고 내역 조회 (사업자 본인 것만)
+router.get("/reports", getReports);
 
 // GET /api/business/reviews → 사업자의 모든 숙소 리뷰 목록 조회
 router.get("/", getReviews);

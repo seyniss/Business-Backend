@@ -11,14 +11,14 @@ const bookingSchema = new mongoose.Schema(
     
     userId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: 'BusinessUser',
       required: true,
       index: true
     },
     
-    businessId: {
+    businessUserId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Business',
+      ref: 'BusinessUser',
       required: true,
       index: true
     },
@@ -87,7 +87,7 @@ const bookingSchema = new mongoose.Schema(
 );
 
 // 인덱스
-bookingSchema.index({ businessId: 1, createdAt: -1 });
+bookingSchema.index({ businessUserId: 1, createdAt: -1 });
 bookingSchema.index({ roomId: 1, bookingStatus: 1 });
 bookingSchema.index({ checkinDate: 1, checkoutDate: 1 });
 bookingSchema.index({ bookingStatus: 1 });

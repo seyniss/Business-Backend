@@ -6,12 +6,16 @@ const mongoose = require("mongoose");
 // 예약 생성
 const createBooking = async (req, res) => {
   try {
-    const { room_id, adult, child, checkin_date, checkout_date } = req.body;
+    // 프론트엔드는 checkIn, checkOut을 보내지만, 서비스는 checkin_date, checkout_date를 기대
+    const checkin_date = req.body.checkIn || req.body.checkin_date;
+    const checkout_date = req.body.checkOut || req.body.checkout_date;
+    const room_id = req.body.roomId || req.body.room_id;
+    const { adult, child } = req.body;
     const user_id = req.user.id; // 로그인한 사용자의 ID 사용
 
     // 필수 필드 검증
     if (!room_id || !checkin_date || !checkout_date) {
-      return res.status(400).json(errorResponse("필수 필드가 누락되었습니다. (room_id, checkin_date, checkout_date)", 400));
+      return res.status(400).json(errorResponse("필수 필드가 누락되었습니다. (roomId, checkIn, checkOut)", 400));
     }
 
     // ObjectId 형식 검증
@@ -59,7 +63,7 @@ const createBooking = async (req, res) => {
       checkin_date: checkinDate,
       checkout_date: checkoutDate,
       duration
-    }, req.user.id, req.user.role);
+    }, req.user.id);
 
     return res.status(201).json(successResponse(result, "예약이 생성되었습니다.", 201));
   } catch (error) {
@@ -96,11 +100,12 @@ const getBookings = async (req, res) => {
       lodgingId: req.query.lodgingId,
       startDate: req.query.startDate,
       endDate: req.query.endDate,
-      page: req.query.page,
-      limit: req.query.limit
+      search: req.query.search,
+      page: req.query.page || 1,
+      limit: req.query.pageSize || req.query.limit || 10
     };
 
-    const result = await bookingService.getBookings(filters, req.user.id, req.user.role);
+    const result = await bookingService.getBookings(filters, req.user.id);
     return res.status(200).json(successResponse(result, "SUCCESS", 200));
   } catch (error) {
     console.error("GET /api/bookings 실패", error);
@@ -120,7 +125,7 @@ const getBookingById = async (req, res) => {
       return res.status(400).json(errorResponse("잘못된 id 형식입니다.", 400));
     }
 
-    const result = await bookingService.getBookingById(req.params.id, req.user.id, req.user.role);
+    const result = await bookingService.getBookingById(req.params.id, req.user.id);
     return res.status(200).json(successResponse(result, "SUCCESS", 200));
   } catch (error) {
     console.error("GET /api/bookings/:id 실패", error);
@@ -144,6 +149,11 @@ const updateBookingStatus = async (req, res) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json(errorResponse("잘못된 id 형식입니다.", 400));
+    }
+
+    // req.body가 없는 경우 처리
+    if (!req.body) {
+      return res.status(400).json(errorResponse("요청 본문이 없습니다.", 400));
     }
 
     const { status, cancellationReason } = req.body;
@@ -173,6 +183,11 @@ const updatePaymentStatus = async (req, res) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json(errorResponse("잘못된 id 형식입니다.", 400));
+    }
+
+    // req.body가 없는 경우 처리
+    if (!req.body) {
+      return res.status(400).json(errorResponse("요청 본문이 없습니다.", 400));
     }
 
     const { paymentStatus } = req.body;

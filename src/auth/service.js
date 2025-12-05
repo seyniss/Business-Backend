@@ -1,6 +1,6 @@
-const User = require("./model");
-const Business = require("./business");
+const BusinessUser = require("./model");
 const jwt = require("jsonwebtoken");
+const mongoose = require("mongoose");
 
 const LOCK_MAX = 5;
 const LOCKOUT_DURATION_MS = 10 * 60 * 1000; // 10분
@@ -22,65 +22,91 @@ const makeToken = (user) => {
 
 // 회원가입
 const register = async (userData) => {
-  const { email, password, name, phoneNumber, dateOfBirth, address, profileImage, role, businessName, businessNumber } = userData;
+  const { email, password, name, phoneNumber, businessName, businessNumber } = userData;
 
-  // 이메일 중복 검사
-  const existingUser = await User.findOne({ email: email.toLowerCase() });
+  // [DEBUG] 이메일 중복 검사
+  // 에러 발생 시: 이미 존재하는 이메일로 회원가입 시도
+  const existingUser = await BusinessUser.findOne({ email: email.toLowerCase() });
   if (existingUser) {
+    console.error(`[REGISTER ERROR] EMAIL_ALREADY_EXISTS - email: ${email}, existingUserId: ${existingUser._id}`);
     throw new Error("EMAIL_ALREADY_EXISTS");
   }
 
-  // role 검증 (USER, BUSINESS, ADMIN 중 하나)
-  const validRoles = ["USER", "BUSINESS", "ADMIN"];
-  const userRole = role && validRoles.includes(role) ? role : "USER";
-
-  // 사업자로 가입하는 경우 사업자 정보 검증
-  if (userRole === "BUSINESS") {
-    if (!businessName || !businessNumber) {
-      throw new Error("BUSINESS_INFO_REQUIRED");
-    }
-
-    // 사업자등록번호 중복 검사
-    const existingBusiness = await Business.findOne({ businessNumber });
-    if (existingBusiness) {
-      throw new Error("BUSINESS_NUMBER_ALREADY_EXISTS");
-    }
+  // [DEBUG] 전화번호 필수 검증
+  if (!phoneNumber) {
+    console.error(`[REGISTER ERROR] PHONE_NUMBER_REQUIRED - email: ${email}`);
+    throw new Error("PHONE_NUMBER_REQUIRED");
   }
 
-  // User 인스턴스 생성 (passwordHash는 setPassword에서 설정)
-  const user = new User({
+  // [DEBUG] 사업자등록번호 필수 검증
+  if (!businessNumber) {
+    console.error(`[REGISTER ERROR] BUSINESS_NUMBER_REQUIRED - email: ${email}`);
+    throw new Error("BUSINESS_NUMBER_REQUIRED");
+  }
+
+  // [DEBUG] 사업자등록번호 중복 검사
+  // 에러 발생 시: 이미 등록된 사업자등록번호로 회원가입 시도
+  const existingBusiness = await BusinessUser.findOne({ businessNumber });
+  if (existingBusiness) {
+    console.error(`[REGISTER ERROR] BUSINESS_NUMBER_ALREADY_EXISTS - businessNumber: ${businessNumber}`);
+    throw new Error("BUSINESS_NUMBER_ALREADY_EXISTS");
+  }
+
+  // businessName이 없으면 name을 사용
+  const finalBusinessName = businessName || name;
+
+  // [DEBUG] BusinessUser 인스턴스 생성 (passwordHash는 setPassword에서 설정)
+  // 에러 발생 시: BusinessUser 스키마 검증 실패 또는 필수 필드 누락
+  const user = new BusinessUser({
     email: email.toLowerCase(),
     name,
-    phoneNumber: phoneNumber || "",
-    dateOfBirth: dateOfBirth || null,
-    address: address || "",
-    profileImage: profileImage || "",
-    role: userRole,
-    isActive: true
+    phoneNumber: phoneNumber,
+    role: "business", // 항상 사업자로 생성
+    isActive: true,
+    businessName: finalBusinessName,
+    businessNumber: businessNumber
   });
 
-  // 비밀번호 해싱 및 저장
-  await user.setPassword(password);
-  await user.save();
-
-  // 사업자로 가입하는 경우 Business 모델에도 등록
-  if (userRole === "BUSINESS") {
-    await Business.create({
-      loginId: user._id,
-      businessName,
-      businessNumber
-    });
+  // [DEBUG] 비밀번호 해싱 및 저장
+  // 에러 발생 시: 비밀번호 해싱 실패 또는 User 저장 실패 (중복 키, 검증 오류 등)
+  try {
+    await user.setPassword(password);
+    await user.save();
+    
+    // [DEBUG] user._id 검증 및 타입 확인
+    if (!user._id) {
+      console.error(`[REGISTER ERROR] BusinessUser._id is null/undefined after save - email: ${email}`);
+      throw new Error("BUSINESS_USER_ID_NOT_GENERATED");
+    }
+    
+    console.log(`[REGISTER SUCCESS] BusinessUser created - userId: ${user._id}, userId type: ${typeof user._id}, userId constructor: ${user._id.constructor.name}, email: ${email}, role: business`);
+  } catch (userSaveError) {
+    console.error(`[REGISTER ERROR] BusinessUser save failed - email: ${email}, error: ${userSaveError.message}, code: ${userSaveError.code}`);
+    throw userSaveError;
   }
 
+
+  // 프론트엔드 요구사항에 맞게 business 객체 반환
+  const userObj = user.toSafeJSON();
+  const business = {
+    id: userObj._id || userObj.id,
+    name: userObj.name,
+    email: userObj.email,
+    phoneNumber: userObj.phoneNumber,
+    businessNumber: userObj.businessNumber,
+    createdAt: userObj.createdAt
+  };
+
   return {
-    user: user.toSafeJSON(),
-    message: userRole === "BUSINESS" ? "사업자 회원가입 완료" : "회원가입 완료"
+    token: makeToken(user),
+    business,
+    message: "사업자 회원가입 완료"
   };
 };
 
 // 로그인
 const login = async (email, password) => {
-  const user = await User.findOne({ email: email.toLowerCase() })
+  const user = await BusinessUser.findOne({ email: email.toLowerCase() })
     .select("+passwordHash +isActive +failedLoginAttempts +lastLoginAttempt");
 
   if (!user) {
@@ -135,9 +161,20 @@ const login = async (email, password) => {
   // JWT 발급
   const token = makeToken(user);
 
+  // 프론트엔드 요구사항에 맞게 business 객체 반환
+  const userObj = user.toSafeJSON();
+  const business = user.role === 'business' ? {
+    id: userObj._id || userObj.id,
+    name: userObj.name,
+    email: userObj.email,
+    phoneNumber: userObj.phoneNumber,
+    businessNumber: userObj.businessNumber,
+    createdAt: userObj.createdAt
+  } : null;
+
   return {
-    user: user.toSafeJSON(),
     token,
+    business,
     loginAttempts: 0,
     remainingAttempts: LOCK_MAX,
     locked: false
@@ -146,22 +183,21 @@ const login = async (email, password) => {
 
 // 내 정보 조회
 const getMe = async (userId) => {
-  const user = await User.findById(userId);
+  const user = await BusinessUser.findById(userId);
   if (!user) {
-    throw new Error("USER_NOT_FOUND");
+    throw new Error("BUSINESS_USER_NOT_FOUND");
   }
 
-  const responseData = {
-    user: user.toSafeJSON()
+  // 프론트엔드 요구사항에 맞게 business 객체 직접 반환
+  const userObj = user.toSafeJSON();
+  return {
+    id: userObj._id || userObj.id,
+    name: userObj.name,
+    email: userObj.email,
+    phoneNumber: userObj.phoneNumber,
+    businessNumber: userObj.businessNumber,
+    createdAt: userObj.createdAt
   };
-
-  // 역할에 따라 추가 데이터 반환
-  if (user.role === "BUSINESS") {
-    const business = await Business.findOne({ loginId: user._id });
-    responseData.business = business || null;
-  }
-
-  return responseData;
 };
 
 // 로그아웃
@@ -170,50 +206,12 @@ const logout = async (userId) => {
   return { message: '로그아웃 성공' };
 };
 
-// 사업자 신청
-const applyBusiness = async (userId, businessData) => {
-  const { businessName, businessNumber } = businessData;
-
-  // 현재 사용자 정보 조회
-  const user = await User.findById(userId);
-  if (!user) {
-    throw new Error("USER_NOT_FOUND");
-  }
-
-  // 이미 BUSINESS role인지 확인
-  if (user.role === "BUSINESS") {
-    throw new Error("ALREADY_BUSINESS");
-  }
-
-  // 이미 Business 문서가 존재하는지 확인
-  const existingBusiness = await Business.findOne({ loginId: userId });
-  if (existingBusiness) {
-    throw new Error("ALREADY_APPLIED");
-  }
-
-  // Business 문서 생성
-  await Business.create({
-    loginId: userId,
-    businessName,
-    businessNumber
-  });
-
-  // User role을 BUSINESS로 변경 (승인 대기 상태는 Business 모델에서 관리)
-  user.role = "BUSINESS";
-  await user.save();
-
-  return {
-    message: "사업자 신청이 완료되었습니다. 관리자 승인 대기 중입니다.",
-    user: user.toSafeJSON()
-  };
-};
-
 // 비밀번호 변경
 const changePassword = async (userId, currentPassword, newPassword) => {
-  const user = await User.findById(userId).select("+passwordHash");
+  const user = await BusinessUser.findById(userId).select("+passwordHash");
   
   if (!user) {
-    throw new Error("USER_NOT_FOUND");
+    throw new Error("BUSINESS_USER_NOT_FOUND");
   }
 
   // 현재 비밀번호 확인
@@ -231,7 +229,7 @@ const changePassword = async (userId, currentPassword, newPassword) => {
 
 // 비밀번호 찾기 (이메일로 리셋 토큰 발송)
 const forgotPassword = async (email) => {
-  const user = await User.findOne({ email: email.toLowerCase() });
+  const user = await BusinessUser.findOne({ email: email.toLowerCase() });
   
   if (!user) {
     // 보안을 위해 사용자가 존재하지 않아도 성공 메시지 반환
@@ -245,24 +243,32 @@ const forgotPassword = async (email) => {
 
 // 프로필 수정
 const updateProfile = async (userId, profileData) => {
-  const { name, phoneNumber, dateOfBirth, address, profileImage } = profileData;
+  const { name, phoneNumber, businessNumber } = profileData;
 
-  const user = await User.findById(userId);
+  const user = await BusinessUser.findById(userId);
   if (!user) {
-    throw new Error("USER_NOT_FOUND");
+    throw new Error("BUSINESS_USER_NOT_FOUND");
   }
 
   // 업데이트할 필드만 수정
   if (name !== undefined) user.name = name;
   if (phoneNumber !== undefined) user.phoneNumber = phoneNumber;
-  if (dateOfBirth !== undefined) user.dateOfBirth = dateOfBirth || null;
-  if (address !== undefined) user.address = address;
-  if (profileImage !== undefined) user.profileImage = profileImage;
+  if (businessNumber !== undefined) user.businessNumber = businessNumber;
 
   await user.save();
 
+  const userObj = user.toSafeJSON();
+  const business = {
+    id: userObj._id || userObj.id,
+    name: userObj.name,
+    email: userObj.email,
+    phoneNumber: userObj.phoneNumber,
+    businessNumber: userObj.businessNumber,
+    createdAt: userObj.createdAt
+  };
+
   return {
-    user: user.toSafeJSON(),
+    business,
     message: "프로필이 수정되었습니다."
   };
 };
@@ -275,7 +281,7 @@ const kakaoLogin = async (kakaoToken) => {
   
   // 임시 구현: 카카오 토큰 검증 후 사용자 조회 또는 생성
   // const kakaoUserInfo = await verifyKakaoToken(kakaoToken);
-  // const user = await User.findOne({ email: kakaoUserInfo.email, provider: 'kakao' });
+  // const user = await BusinessUser.findOne({ email: kakaoUserInfo.email, provider: 'kakao' });
   
   throw new Error("KAKAO_LOGIN_NOT_IMPLEMENTED");
 };
@@ -293,7 +299,6 @@ module.exports = {
   login,
   getMe,
   logout,
-  applyBusiness,
   changePassword,
   forgotPassword,
   updateProfile,

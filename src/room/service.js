@@ -3,7 +3,7 @@ const RoomPicture = require("../picture/model");
 const Notice = require("../notice/model");
 const Booking = require("../booking/model");
 const Lodging = require("../lodging/model");
-const Business = require("../auth/business");
+const BusinessUser = require("../auth/model");
 
 const S3_BASE_URL =
   process.env.S3_BASE_URL ||
@@ -31,46 +31,95 @@ function processImageUrls(room) {
   return roomObj;
 }
 
-// 객실 목록 조회 (쿼리 파라미터로 lodgingId 전달)
-const getRooms = async (lodgingId, userId) => {
-  const business = await Business.findOne({ login_id: userId });
-  if (!business) {
+// 객실 목록 조회
+const getRooms = async (userId, filters = {}) => {
+  const { lodgingId, status, search, page = 1, pageSize = 10 } = filters;
+  
+  const user = await BusinessUser.findById(userId);
+  if (!user || user.role !== 'business') {
     throw new Error("BUSINESS_NOT_FOUND");
   }
 
-  const lodging = await Lodging.findOne({
-    _id: lodgingId,
-    business_id: business._id
-  });
+  // 사업자의 모든 숙소 조회
+  const lodgings = await Lodging.find({ businessId: user._id }).select('_id').lean();
+  const lodgingIds = lodgings.map(l => l._id);
 
-  if (!lodging) {
-    throw new Error("LODGING_NOT_FOUND");
+  if (lodgingIds.length === 0) {
+    return {
+      rooms: [],
+      totalPages: 0,
+      currentPage: parseInt(page)
+    };
   }
 
-  const rooms = await Room.find({ lodging_id: lodgingId })
-    .sort({ createdAt: -1 })
-    .lean();
+  // 쿼리 구성
+  const query = { lodgingId: { $in: lodgingIds } };
+  
+  // lodgingId 필터
+  if (lodgingId) {
+    if (!lodgingIds.some(id => id.toString() === lodgingId.toString())) {
+      throw new Error("LODGING_NOT_FOUND");
+    }
+    query.lodgingId = lodgingId;
+  }
+  
+  // status 필터 (available → active, unavailable → inactive)
+  if (status) {
+    if (status === 'available') query.status = 'active';
+    else if (status === 'unavailable') query.status = 'inactive';
+    else query.status = status;
+  }
+  
+  // search 필터 (roomName 또는 name 검색)
+  if (search) {
+    query.$or = [
+      { roomName: { $regex: search, $options: 'i' } },
+      { name: { $regex: search, $options: 'i' } }
+    ];
+  }
+
+  const skip = (parseInt(page) - 1) * parseInt(pageSize);
+  
+  const [rooms, total] = await Promise.all([
+    Room.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(pageSize))
+      .lean(),
+    Room.countDocuments(query)
+  ]);
+
+  // 응답 형식 변환
+  const formattedRooms = rooms.map(room => {
+    const processedRoom = processImageUrls(room);
+    // roomImage 처리
+    let imagesArray = [];
+    if (room.roomImage) {
+      imagesArray = [room.roomImage];
+    } else if (room.images && Array.isArray(room.images) && room.images.length > 0) {
+      imagesArray = room.images;
+    }
     
-  const roomsWithDetails = await Promise.all(
-    rooms.map(async (room) => {
-      const [pictures, notice] = await Promise.all([
-        RoomPicture.find({ room_id: room._id }).lean(),
-        Notice.findOne({ room_id: room._id }).lean()
-      ]);
+    return {
+      id: room._id.toString(),
+      name: room.roomName || room.name,
+      type: room.type || 'standard',
+      price: room.price,
+      maxGuests: room.capacityMax || room.maxGuests,
+      amenities: room.amenities || [],
+      description: room.description || "",
+      images: processedRoom.images || imagesArray,
+      available: room.status === 'active',
+      quantity: room.countRoom || room.quantity || 1,
+      status: room.status === 'active' ? 'available' : (room.status === 'inactive' ? 'unavailable' : room.status)
+    };
+  });
 
-      return {
-        room: room,
-        lodging: lodging.toObject(),
-        pictures: pictures.map(p => ({
-          picture_name: p.picture_name,
-          picture_url: processImageUrls({ image: p.picture_url }).image
-        })),
-        notice: notice || null
-      };
-    })
-  );
-
-  return roomsWithDetails;
+  return {
+    rooms: formattedRooms,
+    totalPages: Math.ceil(total / parseInt(pageSize)),
+    currentPage: parseInt(page)
+  };
 };
 
 // 객실 상세 조회
@@ -80,76 +129,137 @@ const getRoomById = async (roomId, userId) => {
     throw new Error("ROOM_NOT_FOUND");
   }
 
-  const lodging = await Lodging.findById(room.lodging_id);
+  const lodging = await Lodging.findById(room.lodgingId);
   if (!lodging) {
     throw new Error("LODGING_NOT_FOUND");
   }
 
-  const business = await Business.findOne({ login_id: userId });
-  if (!business || String(lodging.business_id) !== String(business._id)) {
+  const user = await BusinessUser.findById(userId);
+  if (!user || user.role !== 'business' || String(lodging.businessId) !== String(user._id)) {
     throw new Error("UNAUTHORIZED");
   }
 
   const [pictures, notice] = await Promise.all([
-    RoomPicture.find({ room_id: room._id }).lean(),
-    Notice.findOne({ room_id: room._id }).lean()
+    RoomPicture.find({ roomId: room._id }).lean(),
+    Notice.findOne({ roomId: room._id }).lean()
   ]);
 
+  const processedRoom = processImageUrls(room.toObject());
+  
+  // roomImage 처리
+  let imagesArray = [];
+  if (room.roomImage) {
+    imagesArray = [room.roomImage];
+  } else if (room.images && Array.isArray(room.images) && room.images.length > 0) {
+    imagesArray = room.images;
+  }
+  
   return {
-    room: room.toObject(),
-    lodging: lodging.toObject(),
-    pictures: pictures.map(p => ({
-      picture_name: p.picture_name,
-      picture_url: processImageUrls({ image: p.picture_url }).image
-    })),
-    notice: notice || null
+    id: room._id.toString(),
+    name: room.roomName || room.name,
+    type: room.type || 'standard',
+    price: room.price,
+    maxGuests: room.capacityMax || room.maxGuests,
+    amenities: room.amenities || [],
+    description: room.description || "",
+    images: processedRoom.images || imagesArray,
+    available: room.status === 'active',
+    quantity: room.countRoom || room.quantity || 1,
+    status: room.status === 'active' ? 'available' : (room.status === 'inactive' ? 'unavailable' : room.status),
+    roomSize: room.roomSize,
+    checkInTime: room.checkInTime,
+    checkOutTime: room.checkOutTime,
+    capacityMin: room.capacityMin,
+    ownerDiscount: room.ownerDiscount,
+    platformDiscount: room.platformDiscount
   };
 };
 
 // 객실 생성
 const createRoom = async (roomData, userId) => {
   const {
-    lodging_id,
+    lodgingId,
     price,
-    count_room,
-    check_in_time,
-    check_out_time,
-    room_name,
-    room_size,
-    capacity_max,
-    capacity_min,
-    owner_discount,
-    platform_discount,
-    room_image
+    quantity,
+    countRoom,
+    checkInTime,
+    checkOutTime,
+    name,
+    roomName,
+    type,
+    roomSize,
+    maxGuests,
+    capacityMax,
+    capacityMin,
+    ownerDiscount,
+    platformDiscount,
+    images,
+    roomImage,
+    amenities,
+    description,
+    status
   } = roomData;
 
-  const business = await Business.findOne({ login_id: userId });
-  if (!business) {
+  const user = await BusinessUser.findById(userId);
+  if (!user || user.role !== 'business') {
     throw new Error("BUSINESS_NOT_FOUND");
   }
 
   const lodging = await Lodging.findOne({
-    _id: lodging_id,
-    business_id: business._id
+    _id: lodgingId,
+    businessId: user._id
   });
 
   if (!lodging) {
     throw new Error("LODGING_NOT_FOUND");
   }
 
+  // images/roomImage 처리
+  let imagesArray = [];
+  let finalRoomImage = "";
+  if (roomImage) {
+    finalRoomImage = roomImage;
+    imagesArray = [roomImage];
+  } else if (images) {
+    if (Array.isArray(images)) {
+      imagesArray = images.filter(img => img && img.trim().length > 0);
+      finalRoomImage = imagesArray[0] || "";
+    } else if (typeof images === 'string') {
+      imagesArray = [images];
+      finalRoomImage = images;
+    }
+  }
+
+  // status 값 매핑 (available → active, unavailable → inactive, maintenance → maintenance)
+  let roomStatus = 'active';
+  if (status) {
+    if (status === 'available') roomStatus = 'active';
+    else if (status === 'unavailable') roomStatus = 'inactive';
+    else if (status === 'maintenance') roomStatus = 'maintenance';
+    else roomStatus = status;
+  }
+
   const room = await Room.create({
-    lodging_id,
+    lodgingId: lodgingId,
     price,
-    count_room: count_room || 1,
-    check_in_time: check_in_time || "15:00",
-    check_out_time: check_out_time || "11:00",
-    room_name,
-    room_size: room_size || "",
-    capacity_max,
-    capacity_min: capacity_min || 1,
-    owner_discount: owner_discount || 0,
-    platform_discount: platform_discount || 0,
-    room_image: room_image || ""
+    countRoom: countRoom || quantity || 1,
+    quantity: countRoom || quantity || 1,
+    checkInTime: checkInTime || "15:00",
+    checkOutTime: checkOutTime || "11:00",
+    roomName: roomName || name,
+    name: roomName || name,
+    type: type || 'standard',
+    roomSize: roomSize || "",
+    capacityMax: capacityMax || maxGuests,
+    maxGuests: capacityMax || maxGuests,
+    capacityMin: capacityMin || 1,
+    ownerDiscount: ownerDiscount || 0,
+    platformDiscount: platformDiscount || 0,
+    roomImage: finalRoomImage,
+    images: imagesArray,
+    amenities: amenities || [],
+    description: description || "",
+    status: roomStatus
   });
 
   return room;
@@ -157,47 +267,101 @@ const createRoom = async (roomData, userId) => {
 
 // 객실 수정
 const updateRoom = async (roomId, roomData, userId) => {
-  const room = await Room.findById(roomId).populate('lodging_id');
+  const room = await Room.findById(roomId).populate('lodgingId');
   if (!room) {
     throw new Error("ROOM_NOT_FOUND");
   }
 
-  const lodging = await Lodging.findById(room.lodging_id);
+  const lodging = await Lodging.findById(room.lodgingId);
   if (!lodging) {
     throw new Error("LODGING_NOT_FOUND");
   }
 
-  const business = await Business.findOne({ login_id: userId });
-  if (!business || String(lodging.business_id) !== String(business._id)) {
+  const user = await BusinessUser.findById(userId);
+  if (!user || user.role !== 'business' || String(lodging.businessId) !== String(user._id)) {
     throw new Error("UNAUTHORIZED");
   }
 
   const {
     price,
-    count_room,
-    check_in_time,
-    check_out_time,
-    room_name,
-    room_size,
-    capacity_max,
-    capacity_min,
-    owner_discount,
-    platform_discount,
-    room_image
+    quantity,
+    countRoom,
+    checkInTime,
+    checkOutTime,
+    name,
+    roomName,
+    type,
+    roomSize,
+    maxGuests,
+    capacityMax,
+    capacityMin,
+    ownerDiscount,
+    platformDiscount,
+    images,
+    roomImage,
+    amenities,
+    description,
+    status
   } = roomData;
 
   const updates = {};
   if (price !== undefined) updates.price = price;
-  if (count_room !== undefined) updates.count_room = count_room;
-  if (check_in_time !== undefined) updates.check_in_time = check_in_time;
-  if (check_out_time !== undefined) updates.check_out_time = check_out_time;
-  if (room_name !== undefined) updates.room_name = room_name;
-  if (room_size !== undefined) updates.room_size = room_size;
-  if (capacity_max !== undefined) updates.capacity_max = capacity_max;
-  if (capacity_min !== undefined) updates.capacity_min = capacity_min;
-  if (owner_discount !== undefined) updates.owner_discount = owner_discount;
-  if (platform_discount !== undefined) updates.platform_discount = platform_discount;
-  if (room_image !== undefined) updates.room_image = room_image;
+  if (countRoom !== undefined) {
+    updates.countRoom = countRoom;
+    updates.quantity = countRoom;
+  } else if (quantity !== undefined) {
+    updates.countRoom = quantity;
+    updates.quantity = quantity;
+  }
+  if (checkInTime !== undefined) updates.checkInTime = checkInTime;
+  if (checkOutTime !== undefined) updates.checkOutTime = checkOutTime;
+  if (roomName !== undefined) {
+    updates.roomName = roomName;
+    updates.name = roomName;
+  } else if (name !== undefined) {
+    updates.roomName = name;
+    updates.name = name;
+  }
+  if (type !== undefined) updates.type = type;
+  if (roomSize !== undefined) updates.roomSize = roomSize;
+  if (capacityMax !== undefined) {
+    updates.capacityMax = capacityMax;
+    updates.maxGuests = capacityMax;
+  } else if (maxGuests !== undefined) {
+    updates.capacityMax = maxGuests;
+    updates.maxGuests = maxGuests;
+  }
+  if (capacityMin !== undefined) updates.capacityMin = capacityMin;
+  if (ownerDiscount !== undefined) updates.ownerDiscount = ownerDiscount;
+  if (platformDiscount !== undefined) updates.platformDiscount = platformDiscount;
+  if (roomImage !== undefined) {
+    updates.roomImage = roomImage;
+    updates.images = [roomImage];
+  } else if (images !== undefined) {
+    if (Array.isArray(images)) {
+      const filteredImages = images.filter(img => img && img.trim().length > 0);
+      updates.images = filteredImages;
+      updates.roomImage = filteredImages[0] || "";
+    } else if (typeof images === 'string') {
+      updates.images = [images];
+      updates.roomImage = images;
+    }
+  }
+  if (amenities !== undefined) {
+    if (Array.isArray(amenities)) {
+      updates.amenities = amenities;
+    } else if (typeof amenities === 'string') {
+      updates.amenities = amenities.split(',').map(a => a.trim());
+    }
+  }
+  if (description !== undefined) updates.description = description;
+  if (status !== undefined) {
+    // status 값 매핑
+    if (status === 'available') updates.status = 'active';
+    else if (status === 'unavailable') updates.status = 'inactive';
+    else if (status === 'maintenance') updates.status = 'maintenance';
+    else updates.status = status;
+  }
 
   const updated = await Room.findByIdAndUpdate(
     roomId,
@@ -215,13 +379,13 @@ const updateRoomStatus = async (roomId, status, userId) => {
     throw new Error("ROOM_NOT_FOUND");
   }
 
-  const lodging = await Lodging.findById(room.lodging_id);
+  const lodging = await Lodging.findById(room.lodgingId);
   if (!lodging) {
     throw new Error("LODGING_NOT_FOUND");
   }
 
-  const business = await Business.findOne({ login_id: userId });
-  if (!business || String(lodging.business_id) !== String(business._id)) {
+  const user = await BusinessUser.findById(userId);
+  if (!user || user.role !== 'business' || String(lodging.businessId) !== String(user._id)) {
     throw new Error("UNAUTHORIZED");
   }
 
@@ -233,28 +397,28 @@ const updateRoomStatus = async (roomId, status, userId) => {
 
 // 객실 삭제
 const deleteRoom = async (roomId, userId) => {
-  const room = await Room.findById(roomId).populate('lodging_id');
+  const room = await Room.findById(roomId).populate('lodgingId');
   if (!room) {
     throw new Error("ROOM_NOT_FOUND");
   }
 
-  const lodging = await Lodging.findById(room.lodging_id);
+  const lodging = await Lodging.findById(room.lodgingId);
   if (!lodging) {
     throw new Error("LODGING_NOT_FOUND");
   }
 
-  const business = await Business.findOne({ login_id: userId });
-  if (!business || String(lodging.business_id) !== String(business._id)) {
+  const user = await BusinessUser.findById(userId);
+  if (!user || user.role !== 'business' || String(lodging.businessId) !== String(user._id)) {
     throw new Error("UNAUTHORIZED");
   }
 
-  const hasBookings = await Booking.exists({ room_id: roomId });
+  const hasBookings = await Booking.exists({ roomId: roomId });
   if (hasBookings) {
     throw new Error("HAS_BOOKINGS");
   }
 
-  await RoomPicture.deleteMany({ room_id: roomId });
-  await Notice.deleteOne({ room_id: roomId });
+  await RoomPicture.deleteMany({ roomId: roomId });
+  await Notice.deleteOne({ roomId: roomId });
   await room.deleteOne();
 
   return { ok: true, id: room._id };

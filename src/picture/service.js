@@ -1,7 +1,7 @@
 const RoomPicture = require("./model");
 const Room = require("../room/model");
 const Lodging = require("../lodging/model");
-const Business = require("../auth/business");
+const BusinessUser = require("../auth/model");
 const { deleteObject } = require("../s3");
 
 const S3_BASE_URL =
@@ -24,22 +24,22 @@ function urlToKey(u) {
 
 // 객실별 사진 목록 조회
 const getPicturesByRoom = async (roomId, userId) => {
-  const business = await Business.findOne({ login_id: userId });
-  if (!business) {
+  const user = await BusinessUser.findById(userId);
+  if (!user || user.role !== 'business') {
     throw new Error("BUSINESS_NOT_FOUND");
   }
 
-  const room = await Room.findById(roomId).populate('lodging_id');
+  const room = await Room.findById(roomId).populate('lodgingId');
   if (!room) {
     throw new Error("ROOM_NOT_FOUND");
   }
 
-  const lodging = await Lodging.findById(room.lodging_id);
-  if (!lodging || String(lodging.business_id) !== String(business._id)) {
+  const lodging = await Lodging.findById(room.lodgingId);
+  if (!lodging || String(lodging.businessId) !== String(user._id)) {
     throw new Error("UNAUTHORIZED");
   }
 
-  const pictures = await RoomPicture.find({ room_id: roomId })
+  const pictures = await RoomPicture.find({ roomId: roomId })
     .sort({ createdAt: -1 })
     .lean();
 
@@ -57,24 +57,24 @@ const getPicturesByRoom = async (roomId, userId) => {
 const createPicture = async (pictureData, userId) => {
   const { room_id, picture_name, picture_url } = pictureData;
 
-  const business = await Business.findOne({ login_id: userId });
-  if (!business) {
+  const user = await BusinessUser.findById(userId);
+  if (!user || user.role !== 'business') {
     throw new Error("BUSINESS_NOT_FOUND");
   }
 
-  const room = await Room.findById(room_id).populate('lodging_id');
+  const room = await Room.findById(room_id).populate('lodgingId');
   if (!room) {
     throw new Error("ROOM_NOT_FOUND");
   }
 
-  const lodging = await Lodging.findById(room.lodging_id);
-  if (!lodging || String(lodging.business_id) !== String(business._id)) {
+  const lodging = await Lodging.findById(room.lodgingId);
+  if (!lodging || String(lodging.businessId) !== String(user._id)) {
     throw new Error("UNAUTHORIZED");
   }
 
   const pictureKey = urlToKey(picture_url);
   const picture = await RoomPicture.create({
-    room_id,
+    roomId: room_id,
     picture_name,
     picture_url: pictureKey
   });
@@ -87,8 +87,8 @@ const createPicture = async (pictureData, userId) => {
 
 // 사진 삭제
 const deletePicture = async (pictureId, userId) => {
-  const business = await Business.findOne({ login_id: userId });
-  if (!business) {
+  const user = await BusinessUser.findById(userId);
+  if (!user || user.role !== 'business') {
     throw new Error("BUSINESS_NOT_FOUND");
   }
 
@@ -97,13 +97,13 @@ const deletePicture = async (pictureId, userId) => {
     throw new Error("PICTURE_NOT_FOUND");
   }
 
-  const room = await Room.findById(picture.room_id).populate('lodging_id');
+  const room = await Room.findById(picture.roomId).populate('lodgingId');
   if (!room) {
     throw new Error("ROOM_NOT_FOUND");
   }
 
-  const lodging = await Lodging.findById(room.lodging_id);
-  if (!lodging || String(lodging.business_id) !== String(business._id)) {
+  const lodging = await Lodging.findById(room.lodgingId);
+  if (!lodging || String(lodging.businessId) !== String(user._id)) {
     throw new Error("UNAUTHORIZED");
   }
 
