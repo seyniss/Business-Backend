@@ -2,6 +2,27 @@ const axios = require('axios');
 
 const KAKAO_MAP_API_KEY = process.env.KAKAO_MAP_API_KEY;
 const KAKAO_GEOCODING_URL = 'https://dapi.kakao.com/v2/local/search/address.json';
+if (process.env.NODE_ENV !== 'production') {
+  console.log('🔍 KAKAO_MAP_API_KEY 로드 상태:', KAKAO_MAP_API_KEY ? `설정됨 (길이: ${KAKAO_MAP_API_KEY.length})` : '❌ 설정되지 않음');
+  if (KAKAO_MAP_API_KEY) {
+    console.log('🔍 API 키 앞 10자리:', KAKAO_MAP_API_KEY.substring(0, 10) + '...');
+  }
+}
+// API 키 검증 (시작 시 한 번만 확인)
+const isApiKeyAvailable = () => {
+  return KAKAO_MAP_API_KEY && KAKAO_MAP_API_KEY.trim().length > 0;
+};
+
+// API 키가 없을 때 경고 메시지 출력 (한 번만)
+let apiKeyWarningShown = false;
+const showApiKeyWarning = () => {
+  if (!apiKeyWarningShown && !isApiKeyAvailable()) {
+    console.warn('⚠️  KAKAO_MAP_API_KEY 환경 변수가 설정되지 않았습니다.');
+    console.warn('   주소 좌표 변환 기능이 비활성화됩니다.');
+    console.warn('   .env 파일에 KAKAO_MAP_API_KEY를 추가하거나 환경 변수를 설정해주세요.');
+    apiKeyWarningShown = true;
+  }
+};
 
 /**
  * 카카오맵 Geocoding API를 사용하여 주소를 좌표로 변환
@@ -10,7 +31,8 @@ const KAKAO_GEOCODING_URL = 'https://dapi.kakao.com/v2/local/search/address.json
  * @throws {Error} API 호출 실패 또는 주소를 찾을 수 없을 때
  */
 const addressToCoordinates = async (address) => {
-  if (!KAKAO_MAP_API_KEY) {
+  if (!isApiKeyAvailable()) {
+    showApiKeyWarning();
     throw new Error('KAKAO_MAP_API_KEY 환경 변수가 설정되지 않았습니다.');
   }
 
@@ -67,6 +89,7 @@ const addressToCoordinates = async (address) => {
 };
 
 module.exports = {
-  addressToCoordinates
+  addressToCoordinates,
+  isApiKeyAvailable
 };
 

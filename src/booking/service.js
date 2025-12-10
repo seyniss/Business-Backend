@@ -1,5 +1,6 @@
 const Booking = require("./model");
 const Payment = require("./payment");
+const PaymentType = require("./paymentType");
 const Room = require("../room/model");
 const Lodging = require("../lodging/model");
 const BusinessUser = require("../auth/model");

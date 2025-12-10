@@ -174,6 +174,22 @@ const getDashboardStats = async (userId) => {
   sixMonthsAgo.setDate(1);
   sixMonthsAgo.setHours(0, 0, 0, 0);
 
+  // 최근 6개월의 모든 월 목록 생성 (예약이 없는 월도 포함)
+  const allMonths = [];
+  const currentDate = new Date();
+  currentDate.setDate(1);
+  currentDate.setHours(0, 0, 0, 0);
+  
+  for (let i = 5; i >= 0; i--) {
+    const monthDate = new Date(currentDate);
+    monthDate.setMonth(monthDate.getMonth() - i);
+    const year = monthDate.getFullYear();
+    const month = monthDate.getMonth() + 1;
+    const monthKey = `${year}-${String(month).padStart(2, '0')}`;
+    const monthLabel = `${month}월`;
+    allMonths.push({ key: monthKey, label: monthLabel });
+  }
+
   const monthlyStats = await Booking.aggregate([
     {
       $match: {
@@ -192,21 +208,46 @@ const getDashboardStats = async (userId) => {
     { $sort: { _id: 1 } }
   ]);
 
-  // 각 월별 매출 계산
+  // 월별 데이터를 Map으로 변환 (빠른 조회를 위해)
+  const monthlyStatsMap = new Map();
+  monthlyStats.forEach(stat => {
+    monthlyStatsMap.set(stat._id, stat);
+  });
+
+  // 각 월별 매출 계산 (모든 월 포함)
   const revenueTrend = await Promise.all(
-    monthlyStats.map(async (month) => {
+    allMonths.map(async (monthInfo) => {
+      const monthStat = monthlyStatsMap.get(monthInfo.key);
+      
+      if (!monthStat || !monthStat.bookingIds || monthStat.bookingIds.length === 0) {
+        // 예약이 없는 월
+        return {
+          month: monthInfo.key,
+          monthLabel: monthInfo.label,
+          revenue: 0,
+          bookings: 0
+        };
+      }
+
+      // 예약이 있는 월: 매출 계산
       const payments = await Payment.find({
-        bookingId: { $in: month.bookingIds }
+        bookingId: { $in: monthStat.bookingIds }
       }).lean();
       const revenue = payments.reduce((sum, p) => sum + (p.paid || 0), 0);
-      // "YYYY-MM" 형식을 "N월" 형식으로 변환
-      const [year, monthNum] = month._id.split('-');
-      const monthLabel = `${parseInt(monthNum)}월`;
+      
+      // bookingCount를 명시적으로 확인 (0도 유효한 값)
+      // bookingIds 배열의 길이를 직접 사용하는 것이 가장 정확함
+      const bookingCount = monthStat.bookingIds && Array.isArray(monthStat.bookingIds)
+        ? monthStat.bookingIds.length
+        : (monthStat.bookingCount !== undefined && monthStat.bookingCount !== null
+          ? Number(monthStat.bookingCount)
+          : 0);
+      
       return {
-        month: month._id,
-        monthLabel: monthLabel,
+        month: monthInfo.key,
+        monthLabel: monthInfo.label,
         revenue: revenue,
-        bookings: month.bookingCount
+        bookings: bookingCount
       };
     })
   );
@@ -390,7 +431,8 @@ const getRevenueStats = async (userId, period = 'month') => {
     {
       $group: {
         _id: { $dateToString: { format: period === 'year' ? '%Y-%m' : '%Y-%m-%d', date: '$createdAt' } },
-        bookingIds: { $push: '$_id' }
+        bookingIds: { $push: '$_id' },
+        bookingCount: { $sum: 1 }
       }
     },
     { $sort: { _id: 1 } }
@@ -402,9 +444,18 @@ const getRevenueStats = async (userId, period = 'month') => {
         bookingId: { $in: day.bookingIds }
       }).lean();
       const revenue = payments.reduce((sum, p) => sum + (p.paid || 0), 0);
+      
+      // bookingIds 배열의 길이를 직접 사용 (가장 정확함)
+      const bookingCount = day.bookingIds && Array.isArray(day.bookingIds)
+        ? day.bookingIds.length
+        : (day.bookingCount !== undefined && day.bookingCount !== null
+          ? Number(day.bookingCount)
+          : 0);
+      
       return {
         date: day._id,
-        revenue
+        revenue,
+        bookings: bookingCount
       };
     })
   );
@@ -413,17 +464,7 @@ const getRevenueStats = async (userId, period = 'month') => {
   return {
     labels: dailyRevenueWithAmount.map(item => item.date),
     revenue: dailyRevenueWithAmount.map(item => item.revenue),
-    bookings: dailyRevenueWithAmount.map(item => {
-      // 해당 날짜의 예약 수 계산
-      const dayBookings = bookings.filter(b => {
-        const bookingDate = new Date(b.createdAt);
-        const dateStr = period === 'year' 
-          ? `${bookingDate.getFullYear()}-${String(bookingDate.getMonth() + 1).padStart(2, '0')}`
-          : `${bookingDate.getFullYear()}-${String(bookingDate.getMonth() + 1).padStart(2, '0')}-${String(bookingDate.getDate()).padStart(2, '0')}`;
-        return dateStr === item.date;
-      });
-      return dayBookings.length;
-    })
+    bookings: dailyRevenueWithAmount.map(item => item.bookings)
   };
 };
 

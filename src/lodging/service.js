@@ -76,7 +76,9 @@ const getLodgings = async (userId) => {
   // 응답 형식 변환
   return {
     id: lodging._id.toString(),
+    _id: lodging._id.toString(),
     name: lodging.lodgingName,
+    lodgingName: lodging.lodgingName, // 프론트엔드 호환성을 위해 추가
     description: lodging.description,
     address: lodging.address,
     city: lodging.city || "",
@@ -103,7 +105,8 @@ const getLodgings = async (userId) => {
       description: lodging.categoryId.description
     } : null,
     minPrice: lodging.minPrice,
-    reviewCount: lodging.reviewCount || 0
+    reviewCount: lodging.reviewCount || 0,
+    policies: lodging.policies || ""
   };
 };
 
@@ -223,7 +226,11 @@ const createLodging = async (lodgingData, userId) => {
       coordinates = await addressToCoordinates(address);
     } catch (error) {
       // 좌표 변환 실패해도 에러를 발생시키지 않고 스킵
-      console.warn(`주소 좌표 변환 실패 (스킵): ${address} - ${error.message}`);
+      // API 키가 없는 경우는 이미 경고가 출력되었으므로 간단한 로그만 출력
+      const isApiKeyError = error.message.includes('KAKAO_MAP_API_KEY');
+      if (!isApiKeyError) {
+        console.warn(`⚠️  주소 좌표 변환 실패 (스킵): ${address} - ${error.message}`);
+      }
       coordinates = { lat: undefined, lng: undefined };
     }
   }
@@ -399,7 +406,11 @@ const updateLodging = async (lodgingId, lodgingData, userId) => {
           updates.lng = coordinates.lng;
         } catch (error) {
           // 좌표 변환 실패해도 에러를 발생시키지 않고 스킵
-          console.warn(`주소 좌표 변환 실패 (스킵): ${addressToUse} - ${error.message}`);
+          // API 키가 없는 경우는 이미 경고가 출력되었으므로 간단한 로그만 출력
+          const isApiKeyError = error.message.includes('KAKAO_MAP_API_KEY');
+          if (!isApiKeyError) {
+            console.warn(`⚠️  주소 좌표 변환 실패 (스킵): ${addressToUse} - ${error.message}`);
+          }
           // 좌표를 업데이트하지 않음 (기존 값 유지 또는 undefined)
         }
       }

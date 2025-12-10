@@ -203,14 +203,27 @@ const getReviews = async (userId, filters) => {
   const lodgings = await Lodging.find({ businessId: user._id }).select('_id');
   const lodgingIds = lodgings.map(l => l._id);
 
+  // 디버깅: 숙소 정보 확인
+  if (lodgingIds.length === 0) {
+    console.log(`⚠️  사업자 ${user._id}의 숙소가 없습니다.`);
+    return {
+      reviews: [],
+      totalPages: 0,
+      currentPage: parseInt(page)
+    };
+  }
+
   // 필터 조건
   const query = {
     lodgingId: { $in: lodgingIds }
   };
 
-  // 상태 필터
+  // 상태 필터 (기본값: active만 조회)
   if (status && ['active', 'blocked'].includes(status)) {
     query.status = status;
+  } else {
+    // status가 지정되지 않으면 active 상태만 조회
+    query.status = 'active';
   }
 
   // 평점 필터
@@ -218,17 +231,25 @@ const getReviews = async (userId, filters) => {
     query.rating = parseInt(rating);
   }
 
+  // 디버깅: 쿼리 확인
+  console.log(`🔍 리뷰 조회 쿼리:`, JSON.stringify({
+    lodgingIds: lodgingIds.map(id => id.toString()),
+    status: query.status,
+    rating: query.rating
+  }, null, 2));
+  console.log(`🔍 사업자 숙소 ID 개수: ${lodgingIds.length}`);
+
   // 리뷰 조회
   const [reviews, total] = await Promise.all([
     Review.find(query)
       .populate('userId', 'name')
-      .populate('lodgingId', 'name')
+      .populate('lodgingId', 'lodgingName')
       .populate({
         path: 'bookingId',
         select: 'checkinDate checkoutDate bookingStatus',
         populate: {
           path: 'roomId',
-          select: 'name'
+          select: 'roomName name'
         }
       })
       .sort({ createdAt: -1 })
@@ -237,6 +258,16 @@ const getReviews = async (userId, filters) => {
       .lean(),
     Review.countDocuments(query)
   ]);
+
+  // 디버깅: 조회 결과 확인
+  console.log(`🔍 조회된 리뷰 개수: ${reviews.length}개 (전체: ${total}개)`);
+  if (reviews.length > 0) {
+    console.log(`🔍 첫 번째 리뷰 샘플:`, {
+      id: reviews[0]._id.toString(),
+      lodgingId: reviews[0].lodgingId?._id?.toString() || reviews[0].lodgingId?.toString(),
+      status: reviews[0].status
+    });
+  }
 
   // 프론트엔드 요구사항에 맞게 응답 형식 변환
   let formattedReviews = reviews.map(review => {

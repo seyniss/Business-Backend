@@ -16,8 +16,11 @@ PORT=3000
 # 프론트엔드 Origin
 FRONT_ORIGIN=http://localhost:3001
 
-# 카카오 맵 API 키 (주소를 좌표로 자동 변환)
-KAKAO_MAP_API_KEY=e0af66b5ee105a4623992b6a2843c576
+# 카카오 맵 API 키 (REST API 키)
+# 카카오 개발자 콘솔(https://developers.kakao.com)에서 발급받은 REST API 키를 입력하세요
+# 주소를 좌표로 자동 변환하는 기능에 사용됩니다
+# API 키가 없어도 서비스는 정상 작동하지만, 좌표 변환 기능만 비활성화됩니다
+KAKAO_MAP_API_KEY=your_kakao_rest_api_key_here
 
 # JWT Secret (인증 토큰)
 JWT_SECRET=your_jwt_secret_key
